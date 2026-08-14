@@ -181,4 +181,64 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
   })
+  it('filters the model list by id or name and hides groups with no match', () => {
+    const groups = [
+      { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' }] },
+      { id: 'anthropic', name: 'Anthropic', models: [{ id: 'claude-sonnet', name: 'Claude Sonnet' }] },
+    ]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const radios = (): HTMLElement[] => screen.getAllByRole('menuitemradio')
+
+    // 'v4' matches the id substring; the Anthropic group disappears with its models.
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'v4' } })
+    expect(radios().map(item => item.textContent)).toEqual(['DeepSeek-V4-Flash'])
+    expect(screen.queryByText('Anthropic')).toBeNull()
+
+    // Clearing the query restores every group.
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: '' } })
+    expect(radios().map(item => item.textContent)).toEqual(['DeepSeek-V4-Flash', 'Claude Sonnet'])
+    expect(screen.getByText('Anthropic')).toBeTruthy()
+  })
+
+  it('matches names case-insensitively and reports an empty filter', () => {
+    const groups = [
+      { id: 'deepseek-official', name: 'DeepSeek', models: [{ id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' }] },
+      { id: 'anthropic', name: 'Anthropic', models: [{ id: 'claude-sonnet', name: 'Claude Sonnet' }] },
+    ]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({ groups }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /选择模型|当前/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const radios = (): HTMLElement[] => screen.getAllByRole('menuitemradio')
+
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'SONNET' } })
+    expect(radios().map(item => item.textContent)).toEqual(['Claude Sonnet'])
+    expect(screen.queryByText('DeepSeek')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: 'zzz' } })
+    expect(screen.getByText('没有匹配的模型。')).toBeTruthy()
+    expect(screen.queryAllByRole('menuitemradio')).toEqual([])
+
+    fireEvent.change(screen.getByLabelText('搜索模型'), { target: { value: '' } })
+    expect(radios().map(item => item.textContent)).toEqual(['DeepSeek-V4-Flash', 'Claude Sonnet'])
+  })
 })

@@ -133,6 +133,30 @@
   overflow-y: auto;
 }
 
+/* The model pane's search field, sized for the menu's compact copy. */
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 2px 0 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+}
+
+.search:focus {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.search::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
 .group + .group {
   margin-top: 4px;
 }

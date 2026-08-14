@@ -52,6 +52,9 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  // The model pane's search narrows which groups render; it never affects
+  // the selection, so typing does not touch state.current.
+  const [query, setQuery] = useState('')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -76,6 +79,15 @@ export function ModelSelect(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [state.groups])
+  const visibleGroups = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    if (needle.length === 0) return state.groups
+    return state.groups.flatMap(group => {
+      const models = group.models.filter(model =>
+        (model.id + ' ' + model.name).toLowerCase().includes(needle))
+      return models.length === 0 ? [] : [{ ...group, models }]
+    })
+  }, [state.groups, query])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
@@ -128,6 +140,7 @@ export function ModelSelect(
 
   const show = (): void => {
     setPane('root')
+    setQuery('')
     setOpen(true)
     reload()
   }
@@ -142,7 +155,11 @@ export function ModelSelect(
     const items = itemRefs.current.filter(item => item !== null)
     if (items.length === 0) return
     const active = items.findIndex(item => item === document.activeElement)
-    const next = (Math.max(active, 0) + offset + items.length) % items.length
+    // Focus outside the item list (the search field, the trigger) starts at
+    // the first item going down and the last going up.
+    const next = active === -1
+      ? (offset > 0 ? 0 : items.length - 1)
+      : (active + offset + items.length) % items.length
     items[next]?.focus()
   }
 
@@ -283,8 +300,18 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
+              {choices.length > 0 && (
+                <input
+                  className={css.search}
+                  type="text"
+                  value={query}
+                  placeholder={t('search.placeholder')}
+                  aria-label={t('search.placeholder')}
+                  onChange={(event) => { setQuery(event.target.value) }}
+                />
+              )}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {visibleGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   return (
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
@@ -319,6 +346,9 @@ export function ModelSelect(
                   )
                 })}
               </div>
+              {state.status === 'ready' && choices.length > 0 && query.trim().length > 0 && visibleGroups.length === 0 && (
+                <div className={css.empty}>{t('empty.matches')}</div>
+              )}
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
               )}
