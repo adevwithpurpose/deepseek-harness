@@ -164,6 +164,9 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const [failure, setFailure] = useState<string | undefined>(undefined)
   const [candidates, setCandidates] = useState<readonly DiscoveredModelView[] | undefined>(undefined)
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set())
+  // The picker's search narrows which candidates are visible; it never changes
+  // the selection itself, so a filtered-out candidate keeps its check.
+  const [query, setQuery] = useState('')
   // Rows carry an id and a name; capacities are the exception, so they stay
   // folded until asked for rather than crowding every row with four inputs.
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
@@ -252,6 +255,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       const known = new Set(models.map(model => textOf(model, 'id')))
       setCandidates(found)
       setPicked(new Set(found.filter(model => !known.has(model.id)).map(model => model.id)))
+      setQuery('')
     } catch (error) {
       // The transport rejected rather than answering; without this the button
       // would stay busy with nothing shown.
@@ -264,6 +268,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   const closePicker = (): void => {
     setCandidates(undefined)
     setPicked(new Set())
+    setQuery('')
   }
 
   const adoptPicked = (): void => {
@@ -289,6 +294,13 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
       return next
     })
   }
+
+  /** Candidates matching the search, as the picker renders them. */
+  const visibleCandidates = (candidates ?? []).filter(candidate => {
+    const needle = query.trim().toLowerCase()
+    if (needle.length === 0) return true
+    return (candidate.id + ' ' + (candidate.name ?? '')).toLowerCase().includes(needle)
+  })
 
   // A route the adapter already describes answers without an endpoint; only a
   // draft with neither has nothing to ask about.
@@ -445,23 +457,51 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
           </>
         )}
       >
-        <ul className={styles['candidateList']}>
-          {(candidates ?? []).map(candidate => (
-            <li key={candidate.id} className={styles['candidate']}>
-              <label className={styles['candidateLabel']}>
-                <input
-                  type="checkbox"
-                  checked={picked.has(candidate.id)}
-                  onChange={() => { toggle(candidate.id) }}
-                />
-                {/* The id alone: it is the string adoption writes, and the
-                    capacities the endpoint reported are adopted with it and
-                    editable in the row that appears. */}
-                <span className={styles['candidateId']}>{candidate.id}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
+        <div className={styles['candidateToolbar']}>
+          <button
+            type="button"
+            className={styles['linkButton']}
+            onClick={() => { setPicked(new Set(visibleCandidates.map(candidate => candidate.id))) }}
+          >
+            {t('selectAll')}
+          </button>
+          <button
+            type="button"
+            className={styles['linkButton']}
+            onClick={() => { setPicked(new Set()) }}
+          >
+            {t('deselectAll')}
+          </button>
+        </div>
+        <input
+          className={(styles['input'] + ' ' + styles['candidateSearch'])}
+          type="text"
+          value={query}
+          placeholder={t('searchModels')}
+          aria-label={t('searchModels')}
+          onChange={(event) => { setQuery(event.target.value) }}
+        />
+        {visibleCandidates.length === 0
+          ? <p className={styles['candidateEmpty']}>{t('searchNoMatch')}</p>
+          : (
+            <ul className={styles['candidateList']}>
+              {visibleCandidates.map(candidate => (
+                <li key={candidate.id} className={styles['candidate']}>
+                  <label className={styles['candidateLabel']}>
+                    <input
+                      type="checkbox"
+                      checked={picked.has(candidate.id)}
+                      onChange={() => { toggle(candidate.id) }}
+                    />
+                    {/* The id alone: it is the string adoption writes, and the
+                        capacities the endpoint reported are adopted with it and
+                        editable in the row that appears. */}
+                    <span className={styles['candidateId']}>{candidate.id}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
       </Modal>
     </section>
   )

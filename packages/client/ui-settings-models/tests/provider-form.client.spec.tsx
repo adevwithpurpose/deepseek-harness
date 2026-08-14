@@ -603,6 +603,99 @@ describe('endpoint interrogation', () => {
     // A disclosed output cap rides along with the candidate that has one.
     expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'a' }, { id: 'b', maxTokens: 2048 }])
   })
+
+  it('deselects every candidate in bulk and adopts nothing', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
+    })))
+    const { mutate } = await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    const boxes = (): HTMLInputElement[] =>
+      [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+
+    // Everything newly discovered starts checked; deselect-all clears it.
+    expect(boxes().map(box => box.checked)).toEqual([true, true, true])
+    fireEvent.click(screen.getByText(en.deselectAll))
+    expect(boxes().map(box => box.checked)).toEqual([false, false, false])
+
+    // An empty selection adopts no rows, so the write stores none.
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([])
+  })
+
+  it('selects every candidate back in bulk after deselecting', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{ id: 'a' }, { id: 'b' }],
+    })))
+    const { mutate } = await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    const boxes = (): HTMLInputElement[] =>
+      [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+    fireEvent.click(screen.getByText(en.deselectAll))
+    fireEvent.click(screen.getByText(en.selectAll))
+    expect(boxes().map(box => box.checked)).toEqual([true, true])
+
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'a' }, { id: 'b' }])
+  })
+
+  it('filters the candidate list by search and selects only the matches', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }, { id: 'claude-sonnet' }],
+    })))
+    const { mutate } = await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    const boxes = (): HTMLInputElement[] =>
+      [...document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
+
+    // The search is a view filter: hidden candidates keep their checks.
+    fireEvent.change(screen.getByLabelText(en.searchModels), { target: { value: 'gpt-4o' } })
+    expect(boxes().map(box => box.checked)).toEqual([true, true])
+    expect(screen.queryByText('claude-sonnet')).toBeNull()
+
+    // Select-all means the visible (filtered) candidates only; deselect-all
+    // still clears the whole selection including the hidden candidates.
+    fireEvent.click(screen.getByText(en.deselectAll))
+    fireEvent.click(screen.getByText(en.selectAll))
+    expect(boxes().map(box => box.checked)).toEqual([true, true])
+
+    fireEvent.click(screen.getByText(en.fetchAdopt))
+    fireEvent.click(screen.getByText(en.apply))
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'gpt-4o' }, { id: 'gpt-4o-mini' }])
+  })
+
+  it('shows a no-match message and restores the list when the query clears', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{ id: 'solar-1' }, { id: 'solar-2' }],
+    })))
+    await mountSection({ discover })
+    openEditor('openai')
+
+    fireEvent.click(screen.getByText(en.fetchModels))
+    await screen.findByText(en.fetchTitle)
+    fireEvent.change(screen.getByLabelText(en.searchModels), { target: { value: 'zzz' } })
+    expect(screen.getByText(en.searchNoMatch)).toBeDefined()
+    expect(screen.queryByText('solar-1')).toBeNull()
+
+    fireEvent.change(screen.getByLabelText(en.searchModels), { target: { value: '' } })
+    expect(screen.queryByText('solar-1')).not.toBeNull()
+    expect(screen.queryByText(en.searchNoMatch)).toBeNull()
+  })
+
 })
 
 describe('provider rows', () => {
