@@ -208,6 +208,13 @@ function legacyContribution(raw: ChatConversationViewNode): LegacyContribution {
         partial: null,
         running: null,
       }
+    case 'model-failover':
+      return {
+        anchorSeq: node.anchorSeq,
+        nodes: [node.data.transition],
+        partial: null,
+        running: null,
+      }
     case 'turn-tail':
       return EMPTY_CONTRIBUTION
     default:

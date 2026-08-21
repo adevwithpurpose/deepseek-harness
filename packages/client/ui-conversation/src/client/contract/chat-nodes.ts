@@ -1,6 +1,6 @@
 import type {
   AssistantBlock, AssistantMessageNode, ChatConversationViewNode, CommandNode,
-  CompactionSummaryNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
+  CompactionSummaryNode, ModelFailoverNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
 } from '@deepseek-ai/dsh-client-runtime/client'
 
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */
@@ -43,6 +43,9 @@ export interface ManualCompactionChatData {
   readonly command: CommandNode
   readonly compaction: CompactionSummaryNode | null
 }
+
+/** One durable model failover rendered as a single row. */
+export interface FailoverChatData { readonly transition: ModelFailoverNode }
 
 /** One durable retry chain rendered as a single row. */
 export interface RetryChatData {

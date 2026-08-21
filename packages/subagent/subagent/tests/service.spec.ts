@@ -24,8 +24,8 @@ function fakeParent(id = 'parent-1'): Agent {
   return { id: SessionId(id) } as unknown as Agent
 }
 
-const ALL_CAPS: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
-const NO_CAPS: SubagentCapabilities = { outputSchema: false, depthLimit: false, toolFilter: false, persona: false }
+const ALL_CAPS: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, agentPreset: true }
+const NO_CAPS: SubagentCapabilities = { outputSchema: false, depthLimit: false, toolFilter: false, persona: false, agentPreset: false }
 
 function baseRequest(overrides: Partial<SubagentStartRequest> = {}): SubagentStartRequest {
   return {
@@ -69,6 +69,35 @@ async function service(): Promise<{ ctx: Context; subagents: SubagentRuntime }> 
 }
 
 describe('SubagentRuntime', () => {
+  it('enforces the total start budget across providers for one root', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SubagentRuntime, { maxTotalStartsPerRoot: 2 })
+    ctx.subagents.registerProvider(new StubProvider('a'))
+    ctx.subagents.registerProvider(new StubProvider('b'))
+    await ctx.subagents.start('a', baseRequest())
+    await ctx.subagents.start('b', baseRequest())
+    await expect(ctx.subagents.start('a', baseRequest())).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' })
+    await ctx.fiber.dispose()
+  })
+
+  it('releases a concurrent budget slot after child settlement', async () => {
+    let release!: (value: SubagentResult) => void
+    const pending = new Promise<SubagentResult>(resolve => { release = resolve })
+    const ctx = new Context()
+    await ctx.plugin(SubagentRuntime, { maxConcurrentPerRoot: 1 })
+    ctx.subagents.registerProvider({
+      name: 'pending', capabilities: ALL_CAPS, inheritsParentContext: false,
+      async start(request) { return { id: SessionId(`child:${request.parent.id}`), localAgent: undefined, result: pending, async dispose() {} } },
+    })
+    const first = await ctx.subagents.start('pending', baseRequest())
+    await expect(ctx.subagents.start('pending', baseRequest())).rejects.toMatchObject({ code: 'BUDGET_EXCEEDED' })
+    release({ output: [], stopReason: 'completed' })
+    await first.result
+    await Promise.resolve()
+    await expect(ctx.subagents.start('pending', baseRequest())).resolves.toBeDefined()
+    await ctx.fiber.dispose()
+  })
+
   it('registers, lists, looks up, starts, and removes providers', async () => {
     const { ctx, subagents } = await service()
     const added: string[] = []

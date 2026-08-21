@@ -50,6 +50,8 @@ export interface Config {
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
   agentOptions?: AgentOptions
+  /** Child preset mounted instead of inheriting the parent preset. */
+  agentPreset?: string
   /**
    * Per-child persona that shadows `deployment:persona`. Requires the
    * provider's `persona` capability; omission preserves the deployment persona.
@@ -89,6 +91,7 @@ export const Config: z<Config> = z.object({
     model: z.string(),
     maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
   }).default(undefined as unknown as { provider: string; model: string; maxTokens: number }),
+  agentPreset: z.string(),
   persona: z.string(),
   // Preserve omission; Schemastery's `{ allow: [] }` default would deny every tool.
   toolFilter: z.object({
@@ -282,6 +285,11 @@ export function apply(ctx: Context, config: Config): void {
     // A numeric cap the provider cannot enforce is a misconfiguration — fail at
     // mount (the earliest point the provider's capabilities are known), not on
     // the first delegation.
+    if (config.agentPreset !== undefined && provider.capabilities.agentPreset !== true) {
+      throw new Error(
+        `tool-subagent: provider "${provider.name}" cannot apply agentPreset (no agentPreset capability)`,
+      )
+    }
     if (typeof config.maxDepth === 'number' && !provider.capabilities.depthLimit) {
       throw new Error(
         `tool-subagent: provider "${provider.name}" cannot enforce maxDepth (no depthLimit capability) — `
@@ -379,6 +387,7 @@ export function apply(ctx: Context, config: Config): void {
           prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
           parent,
           ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
+          ...config.agentPreset !== undefined ? { agentPreset: config.agentPreset } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},
           ...config.toolFilter !== undefined ? { toolFilter: config.toolFilter } : {},
           ...maxDepth !== undefined ? { maxDepth } : {},

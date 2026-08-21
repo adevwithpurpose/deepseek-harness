@@ -79,6 +79,27 @@ describe('a child agent composed in-process', () => {
     await run.dispose()
   })
 
+  it('mounts an explicitly requested child preset instead of inheriting the parent preset', async () => {
+    const { ctx, adapter, parent } = await setupPresetHost()
+
+    const run = await startInProcessRun({ ...spawnRequest(parent), agentPreset: 'reviewing' }, {})
+    await run.result
+
+    const childRequest = adapter.requests.at(-1)
+    expect(childRequest?.tools?.map(tool => tool.name)).toEqual(['reviewing_only'])
+    expect(ctx.tools.schemas(run.localAgent).map(schema => schema.name)).toEqual(['reviewing_only'])
+    expect(run.localAgent?.session.header.agentPreset).toBe('reviewing')
+    await run.dispose()
+  })
+
+  it('rejects an unknown requested child preset before publishing a child', async () => {
+    const { ctx, parent } = await setupPresetHost()
+
+    await expect(startInProcessRun({ ...spawnRequest(parent), agentPreset: 'missing' }, {}))
+      .rejects.toThrow('missing')
+    expect([...ctx.agents.list()].map(agent => agent.id)).toEqual([SessionId('parent')])
+  })
+
   it('carries its parent\'s prompt sections', async () => {
     const { parent } = await setupPresetHost()
 

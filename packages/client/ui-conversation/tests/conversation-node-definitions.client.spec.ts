@@ -11,6 +11,7 @@ import { compactionDefinition } from '../src/client/conversation-nodes/compactio
 import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fallback.ts'
 import { nextStepInboxDefinition, nextTurnInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
+import { failoverDefinition } from '../src/client/conversation-nodes/failover.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
 import { toolDefinition } from '../src/client/conversation-nodes/tool.ts'
 import { turnErrorDefinition } from '../src/client/conversation-nodes/turn-error.ts'
@@ -28,6 +29,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   toolDefinition,
   commandDefinition,
   compactionDefinition,
+  failoverDefinition,
   retryDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
@@ -577,6 +579,17 @@ describe('built-in conversation node Definitions', () => {
         reason: { kind: 'error', error: { code: 'TRANSPORT', message: 'failed' } },
       }),
     ])
+    const failover = assembler([
+      at(5, 'llm/failover', {
+        turn: 1, step: 0, attempt: 2,
+        fromProvider: 'omniroute', fromModel: 'oc/big-pickle',
+        toProvider: 'omniroute', toModel: 'opencode-go/deepseek-v4-flash-max',
+        failure: { code: 'TRANSPORT', message: 'first route down' },
+      }),
+    ])
+    const failoverNode = node(snapshot(failover), 'model-failover')
+    expect(failoverNode?.data).toMatchObject({ transition: { attempt: 2, fromModel: 'oc/big-pickle', toModel: 'opencode-go/deepseek-v4-flash-max' } })
+
     const retryNode = node(snapshot(retry), 'model-retry')
     const retryData = retryNode?.data as RetryChatData
     expect(retryData.attempts.map(attempt => attempt.retryState)).toEqual(['started', 'cancelled'])

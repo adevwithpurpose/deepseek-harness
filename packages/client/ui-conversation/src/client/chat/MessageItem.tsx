@@ -277,6 +277,18 @@ export const CompactionNodeView = memo(function CompactionNodeView({ node, t }: 
 })
 
 /** Correlated retry-chain keyed Chat renderer. */
+export const FailoverNodeView = memo(function FailoverNodeView({ node, t }: ChatNodeViewProps<'model-failover'>) {
+  const value = node.data.transition
+  return (
+    <details className={css.retryRow}>
+      <summary className={css.retrySummary}>
+        <span className={css.retryText} role="status">{t('message.failover.label', { attempt: value.attempt, from: value.fromModel, to: value.toModel })}</span>
+      </summary>
+      <div className={css.retryDetails}>{t('message.failover.detail', { fromProvider: value.fromProvider, from: value.fromModel, toProvider: value.toProvider, to: value.toModel })}</div>
+    </details>
+  )
+})
+
 export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeViewProps<'model-retry'>) {
   const data = node.data
   return <ModelRetryItem node={data.current} active={data.current.retryState === 'scheduled'} t={t} />

@@ -144,6 +144,20 @@ export interface ContextMessageNode {
 }
 
 /** Durable notice that a closed failed step is waiting for a model-request retry. */
+/** Durable role model-route transition after a failed request. */
+export interface ModelFailoverNode {
+  kind: 'model-failover'
+  seq: number
+  time: number
+  turn: number
+  step: number
+  attempt: number
+  fromProvider: string
+  fromModel: string
+  toProvider: string
+  toModel: string
+}
+
 export type ModelRetryNode = LlmRetryEventData & {
   kind: 'model-retry'
   seq: number
@@ -284,6 +298,7 @@ export type ConversationNode =
   | SteeringMessageNode
   | ContextMessageNode
   | ModelRetryNode
+  | ModelFailoverNode
   | TurnErrorNode
   | TurnMaxTokensNode
   | ToolResultNode

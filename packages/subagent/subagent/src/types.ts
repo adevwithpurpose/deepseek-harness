@@ -81,13 +81,16 @@ export interface SubagentRunEndInfo {
  * continuable children are composed by the continuation manager itself and are
  * gated by {@link SubagentProvider.prepareContinuable} instead. Each flag
  * corresponds one-to-one to a {@link SubagentStartRequest} option: `depthLimit`
- * to `maxDepth`; the other names match.
+ * to `maxDepth`; the other names match. Every provider declares every flag so
+ * capability omission cannot silently weaken enforcement.
  */
 export interface SubagentCapabilities {
   readonly outputSchema: boolean
   readonly depthLimit: boolean
   readonly toolFilter: boolean
   readonly persona: boolean
+  /** Whether the provider can compose a requested child agent preset. */
+  readonly agentPreset: boolean
 }
 
 /**
@@ -117,6 +120,12 @@ export interface SubagentStartRequest {
    */
   readonly signal: AbortSignal
   readonly agentOptions?: AgentOptions
+  /**
+   * Optional child preset id. Requires {@link SubagentCapabilities.agentPreset};
+   * an enforcing provider mounts this composition instead of inheriting the
+   * parent's preset. Omission preserves exact parent-preset inheritance.
+   */
+  readonly agentPreset?: string
   /**
    * Object-rooted JSON Schema within `assertObjectJsonSchema`'s enforced subset. Start rejects
    * unsupported schemas or providers without the capability. Data must be plain host-realm JSON;

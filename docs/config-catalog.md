@@ -1293,6 +1293,30 @@ export interface Config {
 
 Source: [`packages/feedback/message-feedback/src/index.ts:49`](../packages/feedback/message-feedback/src/index.ts)
 
+<a id="deepseek-aidsh-model-chain"></a>
+
+## `@deepseek-ai/dsh-model-chain`
+
+```ts config-catalog
+/** Agent-scoped chain configuration. */
+export interface Config {
+  /** Ordered routes rotated after request failures. */
+  routes: ModelRoute[]
+  /** Total request attempts allowed for one failed step; default five. */
+  maxAttempts?: number
+}
+
+/** Model route configured for this specialist preset. */
+export interface ModelRoute {
+  /** Registered LLM provider route. */
+  provider: string
+  /** Provider-owned model id. */
+  model: string
+}
+```
+
+Source: [`packages/role/model-chain/src/index.ts:17`](../packages/role/model-chain/src/index.ts)
+
 <a id="deepseek-aidsh-permission-presets"></a>
 
 ## `@deepseek-ai/dsh-permission-presets`
@@ -1460,6 +1484,50 @@ export interface Config {
 ```
 
 Source: [`packages/guard/repeat-tool-reminder/src/index.ts:28`](../packages/guard/repeat-tool-reminder/src/index.ts)
+
+<a id="deepseek-aidsh-role-config"></a>
+
+## `@deepseek-ai/dsh-role-config`
+
+Requires: `rolePolicy`
+
+```ts config-catalog
+/** Provider config. */
+export interface Config {
+  /** Nonempty specialist role table. */
+  roles: RoleConfig[]
+}
+
+/** One configured role policy. */
+export interface RoleConfig {
+  /** Stable lowercase role id. */
+  id: string
+  /** Child agent preset mounted for the role. */
+  preset: string
+  /** Registered subagent provider used to create the child. */
+  subagentProvider: string
+  /** Ordered model routes, primary first. */
+  models: Array<{
+    /** Registered LLM provider route. */
+    provider: string
+    /** Provider-owned model id. */
+    model: string
+  }>
+  /** Optional child persona override. */
+  persona?: string
+  /** Optional child tool restriction. */
+  toolFilter?: {
+    /** Global tools retained by the child. */
+    allow?: string[]
+    /** Global tools denied to the child. */
+    deny?: string[]
+  }
+  /** Absolute delegation depth cap. */
+  maxDepth: number
+}
+```
+
+Source: [`packages/role/role-config/src/index.ts:36`](../packages/role/role-config/src/index.ts)
 
 <a id="deepseek-aidsh-sandbox-local"></a>
 
@@ -1859,7 +1927,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/skill/skill/src/index.ts:279`](../packages/skill/skill/src/index.ts)
+Source: [`packages/skill/skill/src/index.ts:292`](../packages/skill/skill/src/index.ts)
 
 <a id="deepseek-aidsh-skill-filesystem"></a>
 
@@ -1898,6 +1966,24 @@ export interface Config {
 ```
 
 Source: [`packages/skill/skill-filesystem/src/index.ts:49`](../packages/skill/skill-filesystem/src/index.ts)
+
+<a id="deepseek-aidsh-skill-restriction"></a>
+
+## `@deepseek-ai/dsh-skill-restriction`
+
+Requires: `skills`
+
+```ts config-catalog
+/** Static skill catalog policy. */
+export interface Config {
+  /** Skill names retained in the scoped catalog. */
+  allow?: string[]
+  /** Skill names removed from the scoped catalog. */
+  deny?: string[]
+}
+```
+
+Source: [`packages/role/skill-restriction/src/index.ts:7`](../packages/role/skill-restriction/src/index.ts)
 
 <a id="deepseek-aidsh-spill-local"></a>
 
@@ -2020,6 +2106,22 @@ export type JournalMode = 'wal' | 'delete' | 'truncate' | 'persist'
 ```
 
 Source: [`packages/storage/storage-sqlite/src/index.ts:24`](../packages/storage/storage-sqlite/src/index.ts)
+
+<a id="deepseek-aidsh-subagent"></a>
+
+## `@deepseek-ai/dsh-subagent`
+
+```ts config-catalog
+/** Root-wide child-start budget across every subagent Consumer. */
+export interface Config {
+  /** Maximum accepted starts under one top-level orchestration root. */
+  maxTotalStartsPerRoot?: number
+  /** Maximum concurrently live children under one top-level orchestration root. */
+  maxConcurrentPerRoot?: number
+}
+```
+
+Source: [`packages/subagent/subagent/src/index.ts:131`](../packages/subagent/subagent/src/index.ts)
 
 <a id="deepseek-aidsh-subagent-acp"></a>
 
@@ -2372,6 +2474,22 @@ export interface Config {
 
 Source: [`packages/shell/tool-bash-persistent/src/index.ts:405`](../packages/shell/tool-bash-persistent/src/index.ts)
 
+<a id="deepseek-aidsh-tool-delegate"></a>
+
+## `@deepseek-ai/dsh-tool-delegate`
+
+Requires: `tools` · `rolePolicy` · `subagents`
+
+```ts config-catalog
+/** Tool configuration. */
+export interface Config {
+  /** Model-facing tool name; default `delegate`. */
+  toolName?: string
+}
+```
+
+Source: [`packages/role/tool-delegate/src/index.ts:10`](../packages/role/tool-delegate/src/index.ts)
+
 <a id="deepseek-aidsh-tool-fs"></a>
 
 ## `@deepseek-ai/dsh-tool-fs`
@@ -2537,6 +2655,24 @@ export interface Config {
 
 Source: [`packages/workflow/tool-ralph/src/index.ts:23`](../packages/workflow/tool-ralph/src/index.ts)
 
+<a id="deepseek-aidsh-tool-restriction"></a>
+
+## `@deepseek-ai/dsh-tool-restriction`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Static tool policy applied to the current scoped composition. */
+export interface Config {
+  /** Global tool names retained; every other global tool is denied. */
+  allow?: string[]
+  /** Global tool names denied in addition to any allow policy. */
+  deny?: string[]
+}
+```
+
+Source: [`packages/role/role-tool-policy/src/index.ts:7`](../packages/role/role-tool-policy/src/index.ts)
+
 <a id="deepseek-aidsh-tool-session-query"></a>
 
 ## `@deepseek-ai/dsh-tool-session-query`
@@ -2621,6 +2757,8 @@ export interface Config {
    * Agent options applied to every child; omitted fields use child-loop defaults.
    */
   agentOptions?: AgentOptions
+  /** Child preset mounted instead of inheriting the parent preset. */
+  agentPreset?: string
   /**
    * Per-child persona that shadows `deployment:persona`. Requires the
    * provider's `persona` capability; omission preserves the deployment persona.
@@ -3073,6 +3211,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-host-plugin-inventory` — requires `loader` ([`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts))
 - `@deepseek-ai/dsh-llm` ([`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts))
 - `@deepseek-ai/dsh-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
+- `@deepseek-ai/dsh-role` ([`packages/role/role/src/index.ts`](../packages/role/role/src/index.ts))
 - `@deepseek-ai/dsh-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))
 - `@deepseek-ai/dsh-session` ([`packages/core/session/src/index.ts`](../packages/core/session/src/index.ts))
 - `@deepseek-ai/dsh-session-checkpoint-policy` — requires `llm` · `sessionPersistence` · `sessions` · `tools` ([`packages/session/session-checkpoint-policy/src/index.ts`](../packages/session/session-checkpoint-policy/src/index.ts))
@@ -3081,7 +3220,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-session-stats` — requires `sessionProjections` ([`packages/session/session-stats/src/index.ts`](../packages/session/session-stats/src/index.ts))
 - `@deepseek-ai/dsh-skill-badge` — requires `skills` ([`packages/skill/skill-badge/src/index.ts`](../packages/skill/skill-badge/src/index.ts))
 - `@deepseek-ai/dsh-storage` ([`packages/storage/storage/src/index.ts`](../packages/storage/storage/src/index.ts))
-- `@deepseek-ai/dsh-subagent` ([`packages/subagent/subagent/src/index.ts`](../packages/subagent/subagent/src/index.ts))
 - `@deepseek-ai/dsh-subprocess-local` ([`packages/subprocess/subprocess-local/src/index.ts`](../packages/subprocess/subprocess-local/src/index.ts))
 - `@deepseek-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@deepseek-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))

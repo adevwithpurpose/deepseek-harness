@@ -4,6 +4,7 @@ import { registerChatConversationView } from './chat-snapshot-builder.ts'
 import { registerCommandConversationNode } from './command.ts'
 import { registerCompactionConversationNode } from './compaction.ts'
 import { registerUnknownConversationFallback } from './fallback.ts'
+import { registerFailoverConversationNode } from './failover.ts'
 import { registerInboxConversationNodes } from './inbox.ts'
 import { registerMessageConversationNode } from './message.ts'
 import { registerRetryConversationNode } from './retry.ts'
@@ -24,6 +25,7 @@ export function registerConversationNodes(ctx: Context): void {
   registerCommandConversationNode(ctx)
   registerCompactionConversationNode(ctx)
   registerRetryConversationNode(ctx)
+  registerFailoverConversationNode(ctx)
   registerTurnErrorConversationNode(ctx)
   registerTurnMaxTokensConversationNode(ctx)
   registerTurnTailConversationNode(ctx)

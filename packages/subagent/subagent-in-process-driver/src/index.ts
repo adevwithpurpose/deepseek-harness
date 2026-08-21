@@ -117,9 +117,10 @@ export async function startInProcessRun(
   const inherited = captureDelegatedPolicyOverrides(parent)
 
   let structured: StructuredAttachment | undefined
-  const setup = (childCtx: Context): void => {
+  const setup = async (childCtx: Context): Promise<void> => {
     appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, inherited)
-    applyChildComposition(childCtx, parent, {
+    await applyChildComposition(childCtx, parent, {
+      agentPreset: request.agentPreset,
       persona: request.persona,
       toolFilter: request.toolFilter,
     })
@@ -131,7 +132,7 @@ export async function startInProcessRun(
 
   const handle = await parent.ctx.agents.create({
     sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, activationBoundary),
+    meta: childSessionMeta(parent, childDepth, activationBoundary, request.agentPreset),
     ...seed !== undefined ? { seed } : {},
     agentOptions: resolveChildAgentOptions(parent, request.agentOptions, childDepth),
     signal: request.signal,

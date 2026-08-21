@@ -461,6 +461,16 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'The basic backend consumes post-step pressure and request-error recovery events; there is no model-facing compact tool.',
   },
   {
+    key: 'rolePolicy',
+    pkg: 'role',
+    title: 'Specialist role policy service',
+    mode: 'seam',
+    implementations: ['role-config'],
+    consumers: ['tool-delegate'],
+    companions: ['role-tool-policy', 'skill-restriction', 'model-chain'],
+    note: 'The provider registers immutable role policies; delegation resolves child composition while scoped companions enforce tools, skills, and model failover.',
+  },
+  {
     key: 'subagents',
     pkg: 'subagent',
     title: 'Subagent provider and continuation service',

@@ -88,27 +88,30 @@ export function resolveChildAgentOptions(
  * survive persistence, the seed boundary that separates inherited parent
  * history from child work, and the composition the child runs under.
  *
- * The preset is read from the parent's LIVE scope chain rather than from its
- * header, because a parent that switched preset while blank runs on the newer
- * composition and its header still names the older one. Recording it is what
+ * Without an explicit child preset, the preset is read from the parent's LIVE
+ * scope chain rather than from its header, because a parent that switched preset
+ * while blank runs on the newer composition and its header still names the
+ * older one. Recording it is what
  * makes a child's history reconstructable: without it a cold read of the child
  * resolves the deployment default and rebuilds turns under a tool set the
  * child never had.
  * @param parent - the delegating parent agent.
  * @param childDepth - the resolved delegation depth to persist.
  * @param lineageSeedLength - how many leading events came from the parent's log.
+ * @param agentPreset - explicit child preset, or omission to record the parent's live preset.
  * @returns the `meta` for `ctx.agents.create()`.
  */
 export function childSessionMeta(
   parent: Agent,
   childDepth: number,
   lineageSeedLength: number,
+  agentPreset?: string,
 ): NonNullable<CreateAgentOptions['meta']> {
   const parentHeader = parent.session.header
-  const agentPreset = parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
+  const resolvedAgentPreset = agentPreset ?? parent.ctx.get('agentPresets')?.composedPreset(parent.ctx)
   return {
     ...parentHeader.cwd !== undefined ? { cwd: parentHeader.cwd } : {},
-    ...agentPreset === undefined ? {} : { agentPreset },
+    ...resolvedAgentPreset === undefined ? {} : { agentPreset: resolvedAgentPreset },
     parentSession: parentHeader.id,
     // Navigation classification only; the descriptor remains the authority
     // for mode and continuation capability.
@@ -121,6 +124,8 @@ export function childSessionMeta(
 
 /** The scoped composition a child agent's creation window applies. */
 export interface ChildComposition {
+  /** Child preset mounted instead of inheriting the parent's preset. */
+  readonly agentPreset?: string | undefined
   /** Per-child persona shadowing the deployment persona. */
   readonly persona?: string | undefined
   /** Per-child tool scoping. */
@@ -160,12 +165,20 @@ export const SUBAGENT_DELEGATION_CONTEXT
  * @param parent - the delegating parent whose composition the child joins.
  * @param composition - the per-child persona and tool filter to install.
  */
-export function applyChildComposition(
+export async function applyChildComposition(
   childCtx: Context,
   parent: Agent,
   composition: ChildComposition,
-): void {
-  childCtx.get('agentPresets')?.composeFrom(childCtx, parent.ctx)
+): Promise<void> {
+  const presets = childCtx.get('agentPresets')
+  if (composition.agentPreset === undefined) {
+    presets?.composeFrom(childCtx, parent.ctx)
+  } else {
+    if (presets === undefined) {
+      throw new Error('subagent: an explicit child agent preset requires the agent-presets service')
+    }
+    await presets.mount(childCtx, composition.agentPreset)
+  }
   // Order 120: after the sandbox:policy (110) and approval:policy (115) sentences.
   childCtx.systemPrompt.context({ name: 'subagent:delegation', order: 120, text: SUBAGENT_DELEGATION_CONTEXT })
   if (composition.persona !== undefined) {

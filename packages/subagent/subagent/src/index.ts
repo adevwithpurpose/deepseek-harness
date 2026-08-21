@@ -32,6 +32,7 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import { scopeTarget } from '@deepseek-ai/dsh-scope'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import { assertObjectJsonSchema } from '@deepseek-ai/dsh-tools'
@@ -126,6 +127,20 @@ export type { SubagentDescendantListEntry, SubagentListEntry } from './list-chil
 export type { SubagentRunEndInfo, SubagentRunInfo } from './types.ts'
 export type { SubagentIdentityProjection, SubagentTimingProjection } from './projection-types.ts'
 
+/** Root-wide child-start budget across every subagent Consumer. */
+export interface Config {
+  /** Maximum accepted starts under one top-level orchestration root. */
+  maxTotalStartsPerRoot?: number
+  /** Maximum concurrently live children under one top-level orchestration root. */
+  maxConcurrentPerRoot?: number
+}
+
+/** Loader schema for unified root-wide child budgets. */
+export const Config: z<Config> = z.object({
+  maxTotalStartsPerRoot: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+  maxConcurrentPerRoot: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+})
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     subagents: SubagentRuntime
@@ -179,9 +194,15 @@ export class SubagentRuntime extends Service {
    * composes into the carrier.
    */
   private readonly emitLifecycle: LifecycleEmitter
+  private readonly maxTotalStartsPerRoot: number | undefined
+  private readonly maxConcurrentPerRoot: number | undefined
+  private readonly rootStarts = new Map<SessionId, number>()
+  private readonly rootLive = new Map<SessionId, number>()
 
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'subagents')
+    this.maxTotalStartsPerRoot = config.maxTotalStartsPerRoot
+    this.maxConcurrentPerRoot = config.maxConcurrentPerRoot
     this.emitLifecycle = createLifecycleEmitter(this.ctx, parent => scopeTarget(this, parent))
     ctx.inject(['agents'], (childCtx: Context) => {
       const manager = new SubagentContinuationManager(childCtx, {
@@ -193,6 +214,12 @@ export class SubagentRuntime extends Service {
         /* v8 ignore else -- one injected binding owns the slot until its fiber disposes. */
         if (this.continuations === manager) this.continuations = undefined
       }, 'subagents.continuationBinding()')
+    })
+    ctx.on('agent/disposed', ({ agent }) => {
+      if (agent.session.header.delegationDepth === undefined) {
+        this.rootStarts.delete(agent.id)
+        this.rootLive.delete(agent.id)
+      }
     })
     ctx.inject(['sessionProjections'], (projectionCtx) => {
       projectionCtx.sessionProjections.register(subagentTimingProjectionDefinition)
@@ -210,7 +237,21 @@ export class SubagentRuntime extends Service {
    * @throws when continuation services are unavailable or materialization fails.
    */
   async startContinuable(spec: ContinuableStartSpec): Promise<ContinuableStart> {
-    return this.requireContinuations().startContinuable(spec)
+    const continuations = this.requireContinuations()
+    const provider = this.expectProvider(spec.provider)
+    this.assertCapabilities(provider, spec.request)
+    const budget = this.admit(spec.request.parent)
+    try {
+      const started = await continuations.startContinuable(spec)
+      const child = this.ctx.get('agents')?.get(started.childId)
+      if (child !== undefined) {
+        child.ctx.on('agent/disposed', ({ agent }) => { if (agent === child) budget.release() })
+      }
+      return started
+    } catch (error) {
+      budget.release()
+      throw error
+    }
   }
 
   /**
@@ -422,7 +463,15 @@ export class SubagentRuntime extends Service {
       ...request.label !== undefined ? { label: request.label } : {},
     })
     const resolved: ResolvedSubagentStartRequest = { ...request, descriptor }
-    return observeRun(this.emitLifecycle, name, request.parent, await provider.start(resolved))
+    const budget = this.admit(request.parent)
+    try {
+      const run = observeRun(this.emitLifecycle, name, request.parent, await provider.start(resolved))
+      void run.result.finally(budget.release).catch(() => {})
+      return run
+    } catch (error) {
+      budget.release()
+      throw error
+    }
   }
 
   /**
@@ -477,13 +526,54 @@ export class SubagentRuntime extends Service {
     return createActivationObserver(this.emitLifecycle, provider, childId, parent)
   }
 
+  /** Resolve a live delegation tree's top-level root through durable parent lineage. */
+  private rootOf(parent: Agent): SessionId {
+    let current = parent
+    const seen = new Set<SessionId>()
+    while (current.session?.header.parentSession !== undefined) {
+      if (seen.has(current.id)) throw new Error('subagent parent lineage contains a cycle')
+      seen.add(current.id)
+      const next = this.ctx.get('agents')?.get(current.session.header.parentSession)
+      if (next === undefined) break
+      current = next
+    }
+    return current.id
+  }
+
+  /** Reserve one root-budget slot before provider or continuation child creation. */
+  private admit(parent: Agent): { root: SessionId; release: () => void } {
+    const root = this.rootOf(parent)
+    const starts = this.rootStarts.get(root) ?? 0
+    const live = this.rootLive.get(root) ?? 0
+    if (this.maxTotalStartsPerRoot !== undefined && starts >= this.maxTotalStartsPerRoot) {
+      throw new SubagentError(`subagent root "${root}" exhausted its total start budget (${this.maxTotalStartsPerRoot})`, 'BUDGET_EXCEEDED')
+    }
+    if (this.maxConcurrentPerRoot !== undefined && live >= this.maxConcurrentPerRoot) {
+      throw new SubagentError(`subagent root "${root}" reached its concurrent child budget (${this.maxConcurrentPerRoot})`, 'BUDGET_EXCEEDED')
+    }
+    this.rootStarts.set(root, starts + 1)
+    this.rootLive.set(root, live + 1)
+    let active = true
+    return { root, release: () => {
+      if (!active) return
+      active = false
+      const remaining = (this.rootLive.get(root) ?? 1) - 1
+      if (remaining === 0) this.rootLive.delete(root)
+      else this.rootLive.set(root, remaining)
+    } }
+  }
+
   /** Reject the first requested capability that the provider lacks. */
-  private assertCapabilities(provider: SubagentProvider, request: SubagentStartRequest): void {
+  private assertCapabilities(
+    provider: SubagentProvider,
+    request: Pick<SubagentStartRequest, 'outputSchema' | 'maxDepth' | 'toolFilter' | 'persona' | 'agentPreset'>,
+  ): void {
     const needs: { when: boolean; cap: keyof SubagentCapabilities }[] = [
       { when: request.outputSchema !== undefined, cap: 'outputSchema' },
       { when: request.maxDepth !== undefined, cap: 'depthLimit' },
       { when: request.toolFilter !== undefined, cap: 'toolFilter' },
       { when: request.persona !== undefined, cap: 'persona' },
+      { when: request.agentPreset !== undefined, cap: 'agentPreset' },
     ]
     for (const { when, cap } of needs) {
       if (when && !provider.capabilities[cap]) {

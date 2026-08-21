@@ -31,6 +31,8 @@ import PlanModeController from '@deepseek-ai/dsh-plan-mode'
 import WebRuntime from '@deepseek-ai/dsh-web'
 import * as WebSearchExa from '@deepseek-ai/dsh-web-search-exa'
 import * as WebFetchLocal from '@deepseek-ai/dsh-web-fetch-http'
+import RolePolicyRegistry, { RoleId } from '@deepseek-ai/dsh-role'
+import * as ToolDelegate from '@deepseek-ai/dsh-tool-delegate'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type { SubagentProvider, SubagentReportDelivery } from '@deepseek-ai/dsh-subagent'
 import * as ToolSubagentControl from '@deepseek-ai/dsh-tool-subagent-control'
@@ -100,7 +102,7 @@ const OUT = 'docs/tool-catalog.md'
 function registerCatalogSubagentProvider(ctx: Context, name: string): void {
   const provider: SubagentProvider = {
     name,
-    capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+    capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, agentPreset: true },
     inheritsParentContext: false,
     start: () => Promise.reject(new Error('tool-catalog provider cannot start a child')),
     // Declared so consumers configured for continuable background mode mount.
@@ -434,6 +436,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-delegate',
+    dir: 'tool-delegate',
+    source: 'packages/role/tool-delegate/src/index.ts',
+    requires: ['ctx.rolePolicy', 'ctx.subagents'],
+    writes: ['child session lifecycle'],
+    async mount(ctx) {
+      await ctx.plugin(SubagentRuntime)
+      await ctx.plugin(RolePolicyRegistry)
+      ctx.rolePolicy.register({ id: RoleId('explorer'), revision: 'catalog', preset: 'explorer', subagentProvider: 'catalog', models: [{ provider: 'catalog', model: 'catalog' }], maxDepth: 1 })
+      ctx.subagents.registerProvider({ name: 'catalog', capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, agentPreset: true }, inheritsParentContext: false, async start() { throw new Error('catalog-only provider') } })
+      await ctx.plugin(ToolDelegate)
+    },
+    note: 'Deployment role policy resolves provider, model chain, preset, persona, tool policy, and depth; these execution knobs are absent from the model schema.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-subagent',

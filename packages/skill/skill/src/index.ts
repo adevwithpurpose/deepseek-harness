@@ -12,7 +12,7 @@
 
 import { Context, Service } from '@deepseek-ai/cordis'
 import { assertNever } from '@deepseek-ai/dsh-llm'
-import { NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
+import { AnonymousEntries, NamedEntries, ScopedLayers, scopeChainOf, scopeOf } from '@deepseek-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer } from '@deepseek-ai/dsh-scope'
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
@@ -117,6 +117,19 @@ export interface SkillLookupOptions {
 export interface SkillViewOptions extends SkillLookupOptions {
   /** Viewing scope (the calling agent); omitted reads the global layer alone. */
   readonly scope?: ScopeKey | undefined
+}
+
+/** Per-scope filter over the merged inherited skill catalog. */
+export interface SkillRestriction {
+  /** Skill names retained; every other inherited skill is removed. */
+  readonly allow?: readonly string[]
+  /** Skill names removed in addition to any allow restriction. */
+  readonly deny?: readonly string[]
+}
+
+interface CompiledSkillRestriction {
+  readonly allow?: ReadonlySet<string>
+  readonly deny?: ReadonlySet<string>
 }
 
 /**
@@ -330,6 +343,8 @@ class SkillLayer implements ScopeLayer {
   readonly providers: NamedEntries<RegisteredProvider>
   /** Runtime skills registered through contexts carrying this scope. */
   readonly runtime = new Map<string, SkillDefinition>()
+  /** Catalog restrictions contributed by this exact scope. */
+  readonly restrictions = new AnonymousEntries<CompiledSkillRestriction>()
 
   constructor(scope: ScopeKey | undefined) {
     this.providers = new NamedEntries(name => new Error(scope === undefined
@@ -339,7 +354,7 @@ class SkillLayer implements ScopeLayer {
 
   /** Whether every contribution table in this aggregate layer is empty. */
   isEmpty(): boolean {
-    return this.providers.isEmpty() && this.runtime.size === 0
+    return this.providers.isEmpty() && this.runtime.size === 0 && this.restrictions.isEmpty()
   }
 }
 
@@ -461,6 +476,31 @@ export class SkillRegistry extends Service {
   }
 
   /**
+   * Restrict the merged skill catalog for the calling scope. Restrictions from
+   * the scope chain intersect and apply to both list() and get().
+   * @param filter - skill allow and deny policy.
+   * @returns the exact disposer that lifts this restriction.
+   */
+  restrict(filter: SkillRestriction): () => void {
+    const scope = scopeOf(this.ctx)
+    if (scope === undefined) {
+      throw new Error('skills.restrict() requires a scoped context')
+    }
+    if (filter.allow === undefined && filter.deny === undefined) {
+      throw new Error('skills.restrict({}) is a no-op: pass allow and/or deny')
+    }
+    const compiled: CompiledSkillRestriction = {
+      ...(filter.allow === undefined ? {} : { allow: new Set(filter.allow) }),
+      ...(filter.deny === undefined ? {} : { deny: new Set(filter.deny) }),
+    }
+    return this.layers.effect(
+      this.ctx,
+      layer => layer.restrictions.append(compiled),
+      { label: 'skills.restrict()' },
+    )
+  }
+
+  /**
    * List invocation-neutral skill summaries for a workspace. Consumers apply
    * model or user invocation policy at their operational boundary. Lookup
    * options and provider candidates are readonly same-process values borrowed
@@ -561,6 +601,12 @@ export class SkillRegistry extends Service {
       const collected = await this.collectLayer(layer, options)
       if (!collected.cacheable) cacheable = false
       for (const entry of collected.entries) merged.set(entry.candidate.name, entry)
+      for (const restriction of layer.restrictions.values()) {
+        for (const name of merged.keys()) {
+          if (restriction.allow !== undefined && !restriction.allow.has(name)) merged.delete(name)
+          else if (restriction.deny?.has(name) === true) merged.delete(name)
+        }
+      }
     }
     return { entries: merged, cacheable }
   }

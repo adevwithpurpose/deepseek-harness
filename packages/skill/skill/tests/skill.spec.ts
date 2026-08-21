@@ -1105,6 +1105,50 @@ describe('renderSkillContent', () => {
   })
 })
 
+describe('SkillRegistry scoped restrictions', () => {
+  it('intersects allow and deny policies for list and get', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    registerProvider(ctx, new MemoryProvider([
+      memorySkill('allowed', 'Allowed', 100),
+      memorySkill('denied', 'Denied', 90),
+      memorySkill('other', 'Other', 80),
+    ]))
+    const preset = createScope(ctx, { preset: 'restricted' })
+    scopedSkills(preset.ctx).restrict({ allow: ['allowed', 'denied'] })
+    scopedSkills(preset.ctx).restrict({ deny: ['denied'] })
+    const scope = scopeOf(preset.ctx)
+
+    expect((await ctx.skills.list({ scope })).map(skill => skill.name)).toEqual(['allowed'])
+    expect(await ctx.skills.get('denied', { scope })).toBeUndefined()
+    expect((await ctx.skills.get('allowed', { scope }))?.content).toBe('allowed body.')
+    expect((await ctx.skills.list()).map(skill => skill.name)).toEqual(['allowed', 'denied', 'other'])
+    await ctx.fiber.dispose()
+  })
+
+  it('requires a scoped context and a nonempty policy', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    expect(() => ctx.skills.restrict({ allow: ['x'] })).toThrow('requires a scoped context')
+    const preset = createScope(ctx, { preset: 'restricted' })
+    expect(() => scopedSkills(preset.ctx).restrict({})).toThrow('no-op')
+    await ctx.fiber.dispose()
+  })
+
+  it('lifts the restriction when its disposer runs', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SkillRegistry)
+    registerProvider(ctx, new MemoryProvider([memorySkill('a', 'A', 100), memorySkill('b', 'B', 90)]))
+    const preset = createScope(ctx, { preset: 'restricted' })
+    const dispose = scopedSkills(preset.ctx).restrict({ allow: ['a'] })
+    const scope = scopeOf(preset.ctx)
+    expect((await ctx.skills.list({ scope })).map(skill => skill.name)).toEqual(['a'])
+    dispose()
+    expect((await ctx.skills.list({ scope })).map(skill => skill.name)).toEqual(['a', 'b'])
+    await ctx.fiber.dispose()
+  })
+})
+
 describe('SkillRegistry scoped layers', () => {
   it('files a scoped provider into its layer and merges it into that scope view only', async () => {
     const ctx = new Context()
