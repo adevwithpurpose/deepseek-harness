@@ -1032,7 +1032,7 @@ describe('dsh-tool-subagent background mode', () => {
     const parent = ownerAgent(ctx, 'sess-parent')
     ctx.subagents.registerProvider({
       name: 'broken-start-rollback',
-      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false, agentPreset: false },
       inheritsParentContext: false,
       start: request => new Promise((_resolve, reject) => {
         request.signal.addEventListener('abort', () => {

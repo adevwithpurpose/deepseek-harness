@@ -1,6 +1,6 @@
-/** Agent-scoped bounded model-chain failover. */
-import type { Context, Events } from '@deepseek-ai/cordis'
-import type { ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Context } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 export * from './types.ts'
@@ -48,7 +48,7 @@ export function apply(ctx: Context, config: Config): void {
     const route = config.routes[priorAttempts % config.routes.length]!
     return { ...resolved, provider: route.provider, model: route.model }
   })
-  ctx.on('agent/request-error', async (payload: Parameters<Events['agent/request-error']>[0]) => {
+  ctx.on('agent/request-error', async (payload) => {
     const priorAttempts = payload.agent.session.events.filter(event => event.type === 'llm/failover' && event.data.turn === payload.turn && event.data.step === payload.step).length + 1
     if (payload.signal.aborted || priorAttempts >= maxAttempts) return
     const fromIndex = (priorAttempts - 1) % config.routes.length

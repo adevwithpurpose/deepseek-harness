@@ -307,15 +307,15 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
 
   const toggleAllCandidates = (): void => {
     setPicked((current) => {
-      const next = new Set(current)
       if (allVisiblePicked) {
-        for (const candidate of visibleCandidates) next.delete(candidate.id)
-      } else {
-        for (const candidate of visibleCandidates) next.add(candidate.id)
+        return new Set()
       }
+      const next = new Set(current)
+      for (const candidate of visibleCandidates) next.add(candidate.id)
       return next
     })
   }
+
 
 
   // A route the adapter already describes answers without an endpoint; only a
