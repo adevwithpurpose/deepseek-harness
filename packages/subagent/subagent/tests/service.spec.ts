@@ -82,7 +82,7 @@ describe('SubagentRuntime', () => {
 
   it('releases a concurrent budget slot after child settlement', async () => {
     let release!: (value: SubagentResult) => void
-    const pending = new Promise<SubagentResult>(resolve => { release = resolve })
+    const pending = new Promise<SubagentResult>((resolve) => { release = resolve })
     const ctx = new Context()
     await ctx.plugin(SubagentRuntime, { maxConcurrentPerRoot: 1 })
     ctx.subagents.registerProvider({
