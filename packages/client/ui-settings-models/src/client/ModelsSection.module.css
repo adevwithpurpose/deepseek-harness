@@ -644,12 +644,11 @@ select.input {
   --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
-/* Bulk selection above the picker list, as the same quiet capsules as the
-   card header actions so the list stays the loud element. */
-.candidateToolbar {
+.candidateActions {
   display: flex;
   gap: 4px;
-  margin-bottom: 8px;
+  justify-content: flex-end;
+  margin-bottom: 6px;
 }
 
 .candidateSearch {
@@ -665,6 +664,7 @@ select.input {
   line-height: 18px;
   color: var(--dsw-alias-label-tertiary);
 }
+
 
 .candidateList {
   display: flex;

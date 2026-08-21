@@ -302,6 +302,22 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
     return (candidate.id + ' ' + (candidate.name ?? '')).toLowerCase().includes(needle)
   })
 
+  const allVisiblePicked = visibleCandidates.length > 0
+    && visibleCandidates.every(candidate => picked.has(candidate.id))
+
+  const toggleAllCandidates = (): void => {
+    setPicked((current) => {
+      const next = new Set(current)
+      if (allVisiblePicked) {
+        for (const candidate of visibleCandidates) next.delete(candidate.id)
+      } else {
+        for (const candidate of visibleCandidates) next.add(candidate.id)
+      }
+      return next
+    })
+  }
+
+
   // A route the adapter already describes answers without an endpoint; only a
   // draft with neither has nothing to ask about.
   const askable = probe.provider !== undefined || (probe.baseURL !== undefined && probe.baseURL.length > 0)
@@ -457,21 +473,10 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
           </>
         )}
       >
-        <div className={styles['candidateToolbar']}>
-          <button
-            type="button"
-            className={styles['linkButton']}
-            onClick={() => { setPicked(new Set(visibleCandidates.map(candidate => candidate.id))) }}
-          >
-            {t('selectAll')}
-          </button>
-          <button
-            type="button"
-            className={styles['linkButton']}
-            onClick={() => { setPicked(new Set()) }}
-          >
-            {t('deselectAll')}
-          </button>
+        <div className={styles['candidateActions']}>
+          <Button variant="ghost" size="sm" onClick={toggleAllCandidates}>
+            {t(allVisiblePicked ? 'fetchDeselectAll' : 'fetchSelectAll')}
+          </Button>
         </div>
         <input
           className={(styles['input'] + ' ' + styles['candidateSearch'])}
@@ -502,6 +507,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
               ))}
             </ul>
           )}
+
       </Modal>
     </section>
   )
