@@ -21,6 +21,7 @@ import {
   BlockAssembler,
   LlmError,
   createAssistantMessage,
+  createUserMessage,
   deepFreeze,
   errorChain,
   markAgentLoopRequest,
@@ -408,6 +409,17 @@ export class ReactLoopAgent implements Agent {
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
       if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
+
+      const hasActionableContent = message.content.some(block => block.type === 'text' || block.type === 'tool-call')
+      if (!hasActionableContent) {
+        this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [
+          createUserMessage({
+            content: [{ type: 'text', text: 'Please proceed with your response or execute the required tool.' }],
+            source: { kind: 'plugin', plugin: 'dsh-agent-loop' },
+          }),
+        ])
+        return null
+      }
 
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
       if (toolCalls.length === 0) return { kind: 'completed' }
