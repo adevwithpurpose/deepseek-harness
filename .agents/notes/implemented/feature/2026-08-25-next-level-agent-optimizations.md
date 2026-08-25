@@ -19,7 +19,8 @@ Route selection is reconstructed in the Web conversation as a replayable `model-
 - `modelRouteMaxTokens` and `writeScope` are persisted for continuable cold resume; descriptor version is 5.
 - Empty `writeScope` is read-only for routed children; omitted scope remains backward-compatible for non-routed actors.
 - Rename preview is intentionally not a mutation and does not expose workspace/applyEdit.
-- The active preset owns route policy; host/base compositions own shared filesystem/LSP capability rows.
+- The LSP rows ship opt-in: `lsp-stdio` requires at least one configured server and fails loud at apply, so base ships `lsp-stdio` and `tool-lsp` disabled; deployments enable both with real server config.
+- The active preset owns route policy; host/base compositions own shared filesystem capability rows.
 
 ## Verification
 
