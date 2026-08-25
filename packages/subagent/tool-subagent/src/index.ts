@@ -324,7 +324,7 @@ export function apply(ctx: Context, config: Config): void {
     // A numeric cap the provider cannot enforce is a misconfiguration — fail at
     // mount (the earliest point the provider's capabilities are known), not on
     // the first delegation.
-    if (config.agentPreset !== undefined && provider.capabilities.agentPreset !== true) {
+    if (config.agentPreset !== undefined && !provider.capabilities.agentPreset) {
       throw new Error(
         `tool-subagent: provider "${provider.name}" cannot apply agentPreset (no agentPreset capability)`,
       )
@@ -433,18 +433,19 @@ export function apply(ctx: Context, config: Config): void {
         const routeId = routeEntries.length === 0 ? undefined : (args.route ?? config.defaultRoute)
         const selectedRoute = routeId === undefined ? undefined : config.routes?.[routeId]
         if (routeId !== undefined && selectedRoute === undefined) throw new Error(`tool-subagent: unknown route "${routeId}"`)
-        const firstRoute = selectedRoute?.models[0]
-        if (selectedRoute !== undefined && (routeId === undefined || firstRoute === undefined)) {
-          throw new Error('tool-subagent: configured route has no initial model')
-        }
-        const routedOptions: AgentOptions | undefined = selectedRoute === undefined
-          ? config.agentOptions
-          : {
+        const selectedOptions = (() => {
+          if (selectedRoute === undefined) return undefined
+          if (routeId === undefined) throw new Error('tool-subagent: configured route has no id')
+          const firstRoute = selectedRoute.models[0]
+          if (firstRoute === undefined) throw new Error('tool-subagent: configured route has no initial model')
+          return {
             provider: firstRoute.provider,
             model: firstRoute.model,
             modelRouteId: routeId,
             modelRoutes: selectedRoute.models,
-          }
+          } satisfies AgentOptions
+        })()
+        const routedOptions: AgentOptions | undefined = selectedOptions ?? config.agentOptions
         const request = {
           label: args.description,
           prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
