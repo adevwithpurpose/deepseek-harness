@@ -20,6 +20,14 @@ declare module '@deepseek-ai/dsh-system-prompt' {
   }
 }
 
+/** One provider/model candidate in an Agent's ordered request route chain. */
+export interface AgentModelRoute {
+  /** Registered LLM provider route. */
+  provider: string
+  /** Provider-owned model id. */
+  model: string
+}
+
 /** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */
 export interface AgentOptions {
   /** Provider route (must have a registered adapter at call time). */
@@ -28,6 +36,10 @@ export interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /** Model-hidden task route id used for telemetry and policy attribution. */
+  modelRouteId?: string
+  /** Ordered provider/model candidates; the first route is the initial request route. */
+  modelRoutes?: readonly AgentModelRoute[]
 }
 
 /** Options for {@link Agent.cancel}. */

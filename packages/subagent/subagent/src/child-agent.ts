@@ -9,6 +9,7 @@
  */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { installModelChain } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentOptions, CreateAgentOptions } from '@deepseek-ai/dsh-agent'
 import type { SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -183,6 +184,13 @@ export async function applyChildComposition(
   childCtx.systemPrompt.context({ name: 'subagent:delegation', order: 120, text: SUBAGENT_DELEGATION_CONTEXT })
   if (composition.persona !== undefined) {
     childCtx.systemPrompt.section({ name: 'deployment:persona', order: 0, text: composition.persona })
+  }
+  const options = childCtx.agent?.options
+  if (options?.modelRoutes !== undefined) {
+    installModelChain(childCtx, {
+      ...options.modelRouteId === undefined ? {} : { routeId: options.modelRouteId },
+      routes: options.modelRoutes,
+    })
   }
   if (composition.toolFilter !== undefined) childCtx.tools.restrict(composition.toolFilter)
 }

@@ -351,6 +351,36 @@ describe('SubagentRuntime.startContinuable', () => {
     expect(ctx.agents.list().map(agent => agent.id)).toEqual([SessionId('parent')])
   })
 
+  it('persists routed model candidates for continuable cold resume', async () => {
+    const { ctx, parent } = await setup([textResponse('answer')])
+    const started = await ctx.subagents.startContinuable({
+      ...startSpec(parent),
+      request: {
+        prompt: [{ type: 'text', text: 'child task' }],
+        parent,
+        agentOptions: {
+          provider: 'mock',
+          model: 'primary',
+          modelRouteId: 'verify',
+          modelRoutes: [
+            { provider: 'mock', model: 'primary' },
+            { provider: 'mock', model: 'fallback' },
+          ],
+        },
+      },
+    })
+    await waitNoActivation(ctx, started.childId)
+    const loaded = await ctx.sessionPersistence.load(started.childId)
+    expect(loaded.events.find(event => event.type === 'subagent/descriptor')?.data).toMatchObject({
+      version: SUBAGENT_DESCRIPTOR_VERSION,
+      modelRouteId: 'verify',
+      modelRoutes: [
+        { provider: 'mock', model: 'primary' },
+        { provider: 'mock', model: 'fallback' },
+      ],
+    })
+  })
+
   it('omits undeclared composition fields from the descriptor', async () => {
     const { ctx } = await setup([])
     // A routeless parent declares no provider/model, and this start declares no

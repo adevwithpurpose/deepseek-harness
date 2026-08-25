@@ -276,6 +276,86 @@ describe('dsh-tool-subagent', () => {
     expect(seen?.agentOptions).toEqual({ model: 'child-model' })
   })
 
+  it('selects an allowlisted task route and forwards its complete model chain', async () => {
+    let seen: SubagentStartRequest | undefined
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    ctx.subagents.registerProvider({
+      name: 'capture-route',
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false, agentPreset: false },
+      inheritsParentContext: false,
+      start: async (request) => {
+        seen = request
+        return {
+          id: SessionId('routed-child'),
+          localAgent: undefined,
+          result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
+          dispose: async () => {},
+        }
+      },
+    })
+    await ctx.plugin(tool, {
+      provider: 'capture-route',
+      defaultRoute: 'fast',
+      routes: {
+        fast: { description: 'Cheap discovery.', models: [{ provider: 'p', model: 'free' }] },
+        verify: { description: 'Independent verification.', models: [{ provider: 'p', model: 'v1' }, { provider: 'p', model: 'v2' }] },
+      },
+      maxDepth: 'provider-managed',
+    })
+
+    const schema = ctx.tools.schemas().find(item => item.name === 'subagent')
+    expect(schema?.parameters.properties?.['route']).toMatchObject({ enum: ['fast', 'verify'] })
+    await callSubagent(ctx, { description: 'd', prompt: 'p', route: 'verify' })
+    expect(seen?.agentOptions).toEqual({
+      provider: 'p',
+      model: 'v1',
+      modelRouteId: 'verify',
+      modelRoutes: [{ provider: 'p', model: 'v1' }, { provider: 'p', model: 'v2' }],
+    })
+  })
+
+  it('uses the configured default route and rejects ambiguous route configuration', async () => {
+    let seen: SubagentStartRequest | undefined
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    ctx.subagents.registerProvider({
+      name: 'capture-default-route',
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false, agentPreset: false },
+      inheritsParentContext: false,
+      start: async (request) => {
+        seen = request
+        return {
+          id: SessionId('default-routed-child'),
+          localAgent: undefined,
+          result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
+          dispose: async () => {},
+        }
+      },
+    })
+    await ctx.plugin(tool, {
+      provider: 'capture-default-route',
+      defaultRoute: 'fast',
+      routes: { fast: { description: 'Cheap discovery.', models: [{ provider: 'p', model: 'free' }] } },
+      maxDepth: 'provider-managed',
+    })
+    await callSubagent(ctx, { description: 'd', prompt: 'p' })
+    expect(seen?.agentOptions?.model).toBe('free')
+
+    await expect(ctx.plugin(tool, {
+      provider: 'capture-default-route',
+      defaultRoute: 'fast',
+      routes: { fast: { description: 'Cheap discovery.', models: [{ provider: 'p', model: 'free' }] } },
+      agentOptions: { model: 'parent-ish' },
+      maxDepth: 'provider-managed',
+      toolName: 'ambiguous-subagent',
+    })).rejects.toThrow(/mutually exclusive/u)
+  })
+
   it('forwards a configured child agent preset to an enforcing provider', async () => {
     let seen: { agentPreset?: string } | undefined
     const ctx = new Context()

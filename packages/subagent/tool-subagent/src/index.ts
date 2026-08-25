@@ -11,7 +11,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { AgentOptions } from '@deepseek-ai/dsh-agent'
+import type { AgentModelRoute, AgentOptions } from '@deepseek-ai/dsh-agent'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { JsonValue } from '@deepseek-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@deepseek-ai/dsh-subagent'
@@ -26,9 +26,21 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 const SUBAGENT_SECTION_ORDER = 116.5
 
 /** Config: which registered provider this tool delegates to, plus child defaults. */
+/** One allowlisted task route and its ordered model candidates. */
+export interface TaskRouteConfig {
+  /** Concise model-facing guidance for selecting this route. */
+  description: string
+  /** Ordered provider/model candidates, primary first. */
+  models: AgentModelRoute[]
+}
+
 export interface Config {
   /** The `ctx.subagents` provider name to start runs on (e.g. `spawn`, `acp`). */
   provider: string
+  /** Allowlisted task routes. When configured, every child uses one route instead of inheriting the parent model. */
+  routes?: Record<string, TaskRouteConfig>
+  /** Route used when the model omits `route`; required when routes are configured. */
+  defaultRoute?: string
   /**
    * Model-facing tool name (default `subagent`). Each loaded instance must use
    * a distinct name.
@@ -82,6 +94,11 @@ export interface Config {
 
 export const Config: z<Config> = z.object({
   provider: z.string().required(),
+  routes: z.dict(z.object({
+    description: z.string().required(),
+    models: z.array(z.object({ provider: z.string().required(), model: z.string().required() })).required(),
+  })).default(undefined as unknown as Record<string, TaskRouteConfig>),
+  defaultRoute: z.string(),
   toolName: z.string().default('subagent'),
   enableRunInBackground: z.boolean().default(true),
   backgroundMode: z.union(['one-shot', 'continuable'] as const).default('one-shot'),
@@ -280,6 +297,19 @@ export function apply(ctx: Context, config: Config): void {
   // Direct apply() bypasses Schemastery's numeric constraints. A direct-apply
   // omission stays capless (the schema default only runs through the loader).
   if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
+  const routeEntries = Object.entries(config.routes ?? {})
+  if (routeEntries.length > 0) {
+    if (config.agentOptions !== undefined) throw new Error('tool-subagent: `routes` and `agentOptions` are mutually exclusive')
+    if (config.defaultRoute === undefined || config.routes?.[config.defaultRoute] === undefined) {
+      throw new Error('tool-subagent: `defaultRoute` must name one configured route')
+    }
+    for (const [id, route] of routeEntries) {
+      if (!/^[a-z][a-z0-9_-]*$/.test(id)) throw new Error(`tool-subagent: invalid route id "${id}"`)
+      if (route.description.length === 0 || route.models.length === 0) throw new Error(`tool-subagent: route "${id}" requires description and models`)
+    }
+  } else if (config.defaultRoute !== undefined) {
+    throw new Error('tool-subagent: `defaultRoute` requires `routes`')
+  }
   // Reject an empty explicit filter at load instead of failing every delegation.
   if (config.toolFilter !== undefined && config.toolFilter.allow === undefined && config.toolFilter.deny === undefined) {
     throw new Error('tool-subagent: `toolFilter` is configured but names neither `allow` nor `deny` — remove the key or fill the filter')
@@ -313,14 +343,16 @@ export function apply(ctx: Context, config: Config): void {
     }
     disposeTool = ctx.tools.register(defineTool({
       name: toolName,
-      description: wording.description + (backgroundEnabled
+      description: wording.description
+        + (routeEntries.length === 0 ? '' : ` Select one configured task route: ${routeEntries.map(([id, route]) => `${id} (${route.description})`).join('; ')}. Omit route to use ${config.defaultRoute}.`)
+        + (backgroundEnabled
         // The completion notice is the continuation service's own behavior, not
         // a separately installed capability, so this promise holds whenever the
         // continuable background path is reachable at all.
-        ? continuable
-          ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
-          : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
-        : ' This call waits for the subagent and returns its result.'),
+          ? continuable
+            ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
+            : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
+          : ' This call waits for the subagent and returns its result.'),
       parameters: {
         description: {
           type: 'string',
@@ -332,6 +364,13 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
+        ...routeEntries.length > 0 ? {
+          route: {
+            type: 'string' as const,
+            enum: routeEntries.map(([id]) => id),
+            description: `Task route. Defaults to ${config.defaultRoute}.`,
+          },
+        } : {},
         ...backgroundEnabled ? {
           run_in_background: {
             type: 'boolean' as const,
@@ -391,11 +430,26 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
+        const routeId = routeEntries.length === 0 ? undefined : (args.route ?? config.defaultRoute)
+        const selectedRoute = routeId === undefined ? undefined : config.routes?.[routeId]
+        if (routeId !== undefined && selectedRoute === undefined) throw new Error(`tool-subagent: unknown route "${routeId}"`)
+        const firstRoute = selectedRoute?.models[0]
+        if (selectedRoute !== undefined && (routeId === undefined || firstRoute === undefined)) {
+          throw new Error('tool-subagent: configured route has no initial model')
+        }
+        const routedOptions: AgentOptions | undefined = selectedRoute === undefined
+          ? config.agentOptions
+          : {
+            provider: firstRoute.provider,
+            model: firstRoute.model,
+            modelRouteId: routeId,
+            modelRoutes: selectedRoute.models,
+          }
         const request = {
           label: args.description,
           prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
           parent,
-          ...config.agentOptions !== undefined ? { agentOptions: config.agentOptions } : {},
+          ...routedOptions !== undefined ? { agentOptions: routedOptions } : {},
           ...config.agentPreset !== undefined ? { agentPreset: config.agentPreset } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},
           ...config.toolFilter !== undefined ? { toolFilter: config.toolFilter } : {},

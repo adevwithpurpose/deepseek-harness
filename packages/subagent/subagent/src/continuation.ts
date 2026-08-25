@@ -425,6 +425,8 @@ export class SubagentContinuationManager {
       label: spec.label,
       ...agentProvider !== undefined ? { agentProvider } : {},
       ...agentModel !== undefined ? { agentModel } : {},
+      ...request.agentOptions?.modelRouteId !== undefined ? { modelRouteId: request.agentOptions.modelRouteId } : {},
+      ...request.agentOptions?.modelRoutes !== undefined ? { modelRoutes: request.agentOptions.modelRoutes } : {},
       ...request.agentPreset !== undefined ? { agentPreset: request.agentPreset } : {},
       ...request.persona !== undefined ? { persona: request.persona } : {},
       ...request.toolFilter !== undefined ? { toolFilter: request.toolFilter } : {},
@@ -982,6 +984,8 @@ export class SubagentContinuationManager {
         agentOptions: {
           ...descriptor.agentProvider !== undefined ? { provider: descriptor.agentProvider } : {},
           ...descriptor.agentModel !== undefined ? { model: descriptor.agentModel } : {},
+          ...descriptor.modelRouteId !== undefined ? { modelRouteId: descriptor.modelRouteId } : {},
+          ...descriptor.modelRoutes !== undefined ? { modelRoutes: descriptor.modelRoutes } : {},
         },
         composition: { agentPreset: descriptor.agentPreset, persona: descriptor.persona, toolFilter: descriptor.toolFilter },
         signal: options.signal,

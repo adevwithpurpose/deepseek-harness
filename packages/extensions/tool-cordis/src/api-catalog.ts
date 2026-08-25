@@ -2893,8 +2893,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface AgentHandle {\n    agent: Agent;\n    dispose(): Promise<void>;\n}',
   },
   {
+    name: 'AgentModelRoute',
+    declaration: 'export interface AgentModelRoute {\n    provider: string;\n    model: string;\n}',
+  },
+  {
     name: 'AgentOptions',
-    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n}',
+    declaration: 'export interface AgentOptions {\n    provider?: string;\n    model?: string;\n    maxTokens?: number;\n    modelRouteId?: string;\n    modelRoutes?: readonly AgentModelRoute[];\n}',
   },
   {
     name: 'AgentPreset',
@@ -3182,7 +3186,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ContinuableSubagentDescriptorData',
-    declaration: 'export interface ContinuableSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'continuable\';\n    readonly label: string;\n    readonly agentProvider?: string;\n    readonly agentModel?: string;\n    readonly agentPreset?: string;\n    readonly persona?: string;\n    readonly toolFilter?: ToolRestriction;\n}',
+    declaration: 'export interface ContinuableSubagentDescriptorData extends SubagentDescriptorBase {\n    readonly mode: \'continuable\';\n    readonly label: string;\n    readonly agentProvider?: string;\n    readonly agentModel?: string;\n    readonly modelRouteId?: string;\n    readonly modelRoutes?: readonly AgentModelRoute[];\n    readonly agentPreset?: string;\n    readonly persona?: string;\n    readonly toolFilter?: ToolRestriction;\n}',
   },
   {
     name: 'CordisDynamicPackageId',
@@ -3265,8 +3269,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface DiffResultView {\n    card: \'diff\';\n    title?: string;\n    diffs: FileDiff[];\n}',
   },
   {
+    name: 'DirectoryListOptions',
+    declaration: 'export interface DirectoryListOptions {\n    includeFiles?: boolean;\n}',
+  },
+  {
     name: 'DirectoryPickerBrowseCapability',
-    declaration: 'export interface DirectoryPickerBrowseCapability {\n    kind: \'browse\';\n    list(path?: string, signal?: AbortSignal): Promise<DirectoryListing>;\n    createDirectory(path: string, name: string): Promise<string>;\n}',
+    declaration: 'export interface DirectoryPickerBrowseCapability {\n    kind: \'browse\';\n    list(path?: string, signal?: AbortSignal, opts?: DirectoryListOptions): Promise<DirectoryListing>;\n    createDirectory(path: string, name: string): Promise<string>;\n}',
   },
   {
     name: 'DirectoryPickerCapabilities',

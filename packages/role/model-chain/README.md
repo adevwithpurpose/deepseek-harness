@@ -1,6 +1,6 @@
 # @deepseek-ai/dsh-model-chain
 
-Agent-scoped ordered model routing with a bounded total-attempt budget. The scoped listener owns recovery before deployment-wide same-route retry: each failed request records `llm/failover`, advances to the next route, and consumes one slot from a single total-attempt budget. The route affects both prompt variables and request configuration.
+Agent-scoped ordered model routing with a bounded total-attempt budget. Eligible provider, quota, transport, timeout, empty-response, and adapter failures record `llm/failover` and advance to the next configured route; invalid requests, context overflow, cancellation, and acceptance failures stay on their owning path. The route changes request configuration only, so a previous step's fallback cannot contaminate later model-visible prompt variables. An optional route id records `llm/route-selected` for telemetry without adding prompt prose.
 
 ## Model Experience
 
@@ -8,7 +8,7 @@ Agent-scoped ordered model routing with a bounded total-attempt budget. The scop
 
 #### What the model sees
 
-The selected `provider` and `model` prompt variables and the corresponding request route. Route transitions are durable `llm/failover` events.
+No additional route prose. The request provider/model is selected per step, and selection and transitions are durable `llm/route-selected` and `llm/failover` events.
 
 #### Token effect
 

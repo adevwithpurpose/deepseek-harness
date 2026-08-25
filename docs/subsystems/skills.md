@@ -274,6 +274,14 @@ registerProvider(create: (control: SkillProviderControl) => SkillProvider): () =
 register(skill: SkillRegistration): () => void
 
 /**
+ * Restrict the merged skill catalog for the calling scope. Restrictions from
+ * the scope chain intersect and apply to both list() and get().
+ * @param filter - skill allow and deny policy.
+ * @returns the exact disposer that lifts this restriction.
+ */
+restrict(filter: SkillRestriction): () => void
+
+/**
  * List invocation-neutral skill summaries for a workspace. Consumers apply
  * model or user invocation policy at their operational boundary. Lookup
  * options and provider candidates are readonly same-process values borrowed

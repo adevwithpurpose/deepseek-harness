@@ -476,6 +476,17 @@ Source: [`packages/hooks/hook-protocol/src/types.ts:31`](../packages/hooks/hook-
 
 ### `llm/*`
 
+<a id="llmfailover--log-only"></a>
+
+#### `llm/failover` — log-only
+
+```ts persistence-catalog
+/** Records one eligible provider/model failure and the next configured route selected for retry. */
+'llm/failover': ModelFailoverEventData
+```
+
+Source: [`packages/core/agent/src/model-chain.ts:12`](../packages/core/agent/src/model-chain.ts)
+
 <a id="llmretry--log-only"></a>
 
 #### `llm/retry` — log-only
@@ -497,6 +508,17 @@ Source: [`packages/llm/llm-retry/src/types.ts:9`](../packages/llm/llm-retry/src/
 ```
 
 Source: [`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+<a id="llmroute-selected--log-only"></a>
+
+#### `llm/route-selected` — log-only
+
+```ts persistence-catalog
+/** Records the configured task route and its initial provider/model when a routed Agent is created. */
+'llm/route-selected': ModelRouteSelectedEventData
+```
+
+Source: [`packages/core/agent/src/model-chain.ts:10`](../packages/core/agent/src/model-chain.ts)
 
 ### `permission/*`
 
@@ -708,7 +730,7 @@ Source: [`packages/core/session/src/types.ts:254`](../packages/core/session/src/
 'subagent/descriptor': SubagentDescriptorData
 ```
 
-Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent/subagent/src/descriptor.ts)
+Source: [`packages/subagent/subagent/src/descriptor.ts:38`](../packages/subagent/subagent/src/descriptor.ts)
 
 ### `team/*`
 

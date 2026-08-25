@@ -23,6 +23,7 @@
 
 import { snapshotJsonValue } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import type { AgentModelRoute } from '@deepseek-ai/dsh-agent'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 
 declare module '@deepseek-ai/dsh-session/types' {
@@ -44,7 +45,7 @@ declare module '@deepseek-ai/dsh-session/types' {
  * Supporting another composition input is a deliberate version change, never
  * an implicit extra field.
  */
-export const SUBAGENT_DESCRIPTOR_VERSION = 3
+export const SUBAGENT_DESCRIPTOR_VERSION = 4
 
 /** Fields shared by every supported `subagent/descriptor` payload. */
 interface SubagentDescriptorBase {
@@ -76,6 +77,10 @@ export interface ContinuableSubagentDescriptorData extends SubagentDescriptorBas
   readonly agentProvider?: string
   /** Resolved child `agentOptions.model`, when one was declared. */
   readonly agentModel?: string
+  /** Model-hidden task route id retained for telemetry across cold resume. */
+  readonly modelRouteId?: string
+  /** Ordered provider/model candidates retained for failover across cold resume. */
+  readonly modelRoutes?: readonly AgentModelRoute[]
   /** Child preset mounted instead of inheriting the parent's preset. */
   readonly agentPreset?: string
   /** Per-child persona that shadows the deployment persona on resume. */
@@ -113,6 +118,10 @@ export interface ContinuableSubagentDescriptorInput extends SubagentDescriptorIn
   readonly agentProvider?: string
   /** Requested child `agentOptions.model`. */
   readonly agentModel?: string
+  /** Requested model-hidden task route id. */
+  readonly modelRouteId?: string
+  /** Requested ordered provider/model candidates. */
+  readonly modelRoutes?: readonly AgentModelRoute[]
   /** Requested child preset mounted instead of inheriting the parent preset. */
   readonly agentPreset?: string
   /** Requested per-child persona. */
@@ -137,6 +146,8 @@ const CONTINUABLE_DESCRIPTOR_KEYS = new Set([
   ...DESCRIPTOR_BASE_KEYS,
   'agentProvider',
   'agentModel',
+  'modelRouteId',
+  'modelRoutes',
   'agentPreset',
   'persona',
   'toolFilter',
@@ -178,6 +189,20 @@ function optionalStringArray(value: Record<string, unknown>, key: string): strin
     throw new Error(`persisted subagent descriptor toolFilter.${key} must be an array of strings`)
   }
   return items as string[]
+}
+
+/** Validate and reconstruct persisted provider/model candidates. */
+function parseModelRoutes(value: unknown): AgentModelRoute[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error('persisted subagent descriptor modelRoutes must be a non-empty array')
+  }
+  return value.map((item, index) => {
+    if (!isRecord(item) || typeof item['provider'] !== 'string' || typeof item['model'] !== 'string') {
+      throw new Error(`persisted subagent descriptor modelRoutes[${index}] requires provider and model`)
+    }
+    assertKnownKeys(item, new Set(['provider', 'model']), `modelRoutes[${index}]`)
+    return { provider: item['provider'], model: item['model'] }
+  })
 }
 
 /** Validate and reconstruct a persisted tool restriction. */
@@ -236,6 +261,10 @@ function parseSubagentDescriptor(value: unknown): SubagentDescriptorData | undef
   }
   const agentProvider = optionalString(value, 'agentProvider')
   const agentModel = optionalString(value, 'agentModel')
+  const modelRouteId = optionalString(value, 'modelRouteId')
+  const modelRoutes = Object.hasOwn(value, 'modelRoutes')
+    ? parseModelRoutes(value['modelRoutes'])
+    : undefined
   const agentPreset = optionalString(value, 'agentPreset')
   const persona = optionalString(value, 'persona')
   const toolFilter = Object.hasOwn(value, 'toolFilter')
@@ -248,6 +277,8 @@ function parseSubagentDescriptor(value: unknown): SubagentDescriptorData | undef
     label,
     ...agentProvider !== undefined ? { agentProvider } : {},
     ...agentModel !== undefined ? { agentModel } : {},
+    ...modelRouteId !== undefined ? { modelRouteId } : {},
+    ...modelRoutes !== undefined ? { modelRoutes } : {},
     ...agentPreset !== undefined ? { agentPreset } : {},
     ...persona !== undefined ? { persona } : {},
     ...toolFilter !== undefined ? { toolFilter } : {},
@@ -290,6 +321,8 @@ export function snapshotSubagentDescriptor(input: SubagentDescriptorInput): Suba
       label: input.label,
       ...input.agentProvider !== undefined ? { agentProvider: input.agentProvider } : {},
       ...input.agentModel !== undefined ? { agentModel: input.agentModel } : {},
+      ...input.modelRouteId !== undefined ? { modelRouteId: input.modelRouteId } : {},
+      ...input.modelRoutes !== undefined ? { modelRoutes: input.modelRoutes } : {},
       ...input.agentPreset !== undefined ? { agentPreset: input.agentPreset } : {},
       ...input.persona !== undefined ? { persona: input.persona } : {},
       ...input.toolFilter !== undefined ? { toolFilter: input.toolFilter } : {},
