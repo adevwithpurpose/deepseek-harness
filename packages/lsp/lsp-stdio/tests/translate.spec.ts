@@ -75,9 +75,14 @@ describe('normalizeRename', () => {
     expect(normalizeRename({ range: RANGE })).toEqual({ range: RANGE, placeholder: '' })
   })
 
+  it('accepts the bare Range result form with an empty placeholder', () => {
+    expect(normalizeRename(RANGE)).toEqual({ range: RANGE, placeholder: '' })
+  })
+
   it('rejects missing or malformed responses', () => {
     expect(() => normalizeRename(null)).toThrow(/missing/)
     expect(() => normalizeRename({ range: 'bad' })).toThrow(/malformed range/)
+    expect(() => normalizeRename({ nope: true })).toThrow(/malformed range/)
   })
 })
 

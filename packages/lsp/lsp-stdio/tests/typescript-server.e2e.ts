@@ -9,19 +9,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { mkdtemp, mkdir, rm, writeFile, realpath } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Context } from '@deepseek-ai/cordis'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import Lsp, { type LspQueryRequest, type LspQueryResult } from '@deepseek-ai/dsh-lsp'
 import * as LspLocal from '@deepseek-ai/dsh-lsp-stdio'
 
-// The server binary is a dev dependency of this package; resolve its pnpm-hoisted .bin path.
-const serverBin = join(
-  new URL('..', import.meta.url).pathname,
-  'node_modules',
-  '.bin',
-  'typescript-language-server',
+// Launch through Node with the CLI module's real path: portable across
+// platforms (no `.bin` shim / PATHEXT concerns on Windows).
+const serverCli = fileURLToPath(
+  new URL('../node_modules/typescript-language-server/lib/cli.mjs', import.meta.url),
 )
+const serverCommand = process.execPath
 
 let root: string
 let ws: string
@@ -59,8 +59,8 @@ beforeAll(async () => {
   await ctx.plugin(LspLocal, {
     servers: {
       typescript: {
-        command: serverBin,
-        args: ['--stdio'],
+        command: serverCommand,
+        args: [serverCli, '--stdio'],
         extensionToLanguage: { '.ts': 'typescript', '.tsx': 'typescriptreact' },
       },
     },
@@ -113,6 +113,20 @@ describe('real typescript-language-server', () => {
     if (result.kind === 'hover') {
       expect(result.hover).not.toBeNull()
       expect(result.hover?.contents).toContain('Circle')
+    }
+  }, 60_000)
+
+  it('prepares a rename with the symbol range and placeholder', async () => {
+    // Prepare on `describe` at its declaration (line 10, col 17).
+    const result = await ctx.lsp.query(at('prepareRename', 10, 17))
+    expect(result.kind).toBe('rename')
+    if (result.kind === 'rename') {
+      // The server answers with the symbol's line span; the protocol's bare
+      // Range form carries no placeholder, so only type-check it here.
+      expect(typeof result.placeholder).toBe('string')
+      expect(result.range.start.line).toBe(9)
+      expect(result.range.end.line).toBe(9)
+      expect(result.range.end.character).toBeGreaterThan(result.range.start.character)
     }
   }, 60_000)
 })

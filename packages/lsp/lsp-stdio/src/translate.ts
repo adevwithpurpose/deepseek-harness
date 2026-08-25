@@ -196,13 +196,21 @@ export function normalizeHover(payload: unknown): LspHover | null {
   return { contents, range: toRange(range) }
 }
 
-/** Normalize a prepareRename response into a rename range and placeholder. */
+/**
+ * Normalize a prepareRename response into a rename range and placeholder. The
+ * protocol allows two result forms — `{ range, placeholder }` and a bare
+ * `Range` (placeholder then empty) — so both normalize here.
+ */
 export function normalizeRename(payload: unknown): { range: LspRange; placeholder: string } {
   if (payload === null || payload === undefined) throw malformedResponse('LSP rename result was missing')
   if (typeof payload !== 'object') throw malformedResponse('LSP rename result was not an object')
-  const rename = payload as WireRename
-  if (!isRange(rename.range)) throw malformedResponse('LSP rename result contained a malformed range')
-  return { range: toRange(rename.range), placeholder: typeof rename.placeholder === 'string' ? rename.placeholder : '' }
+  const record = payload as Partial<WireRename> & Partial<WireRange>
+  if (record.range !== undefined) {
+    if (!isRange(record.range)) throw malformedResponse('LSP rename result contained a malformed range')
+    return { range: toRange(record.range), placeholder: typeof record.placeholder === 'string' ? record.placeholder : '' }
+  }
+  if (isRange(record)) return { range: toRange(record), placeholder: '' }
+  throw malformedResponse('LSP rename result contained a malformed range')
 }
 
 /** Render the three `Hover.contents` encodings into one string (input is untrusted wire data). */
