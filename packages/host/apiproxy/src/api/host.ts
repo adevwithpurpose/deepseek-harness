@@ -5,7 +5,9 @@
 
 import type { RpcRequest, RpcResponse } from './rpc.ts'
 
-/** One directory row of a listing: a child entry or a breadcrumb ancestor. */
+/**
+ * One directory row of a listing: a child entry or a breadcrumb ancestor.
+ */
 export interface DirectoryEntry {
   /** Base name shown in a browser row (a root crumb carries its full path). */
   name: string
@@ -13,6 +15,8 @@ export interface DirectoryEntry {
   path: string
   /** Hidden by the host platform's convention (dot-prefixed on POSIX); the client owns whether to show it. */
   hidden: boolean
+  /** What the row names: a child directory (or a symlink resolving to one) or a child regular file. */
+  kind: 'directory' | 'file'
 }
 
 /** host.listDirectory response value: one directory level plus its ancestry. */
@@ -23,12 +27,17 @@ export interface DirectoryListing {
   home: string
   /**
    * Ancestor chain from the filesystem root to the listed directory
-   * inclusive; every crumb is a jump target (crumb `hidden` is always false).
+   * inclusive; every crumb is a jump target (crumb `hidden` is always false,
+   * crumb `kind` is always `'directory'`).
    */
   crumbs: DirectoryEntry[]
-  /** Direct child directories, name-sorted; symlinks to directories included. */
+  /**
+   * Direct child directories name-sorted (symlinks to directories included),
+   * followed by the direct child regular files name-sorted when the request
+   * set `includeFiles`.
+   */
   entries: DirectoryEntry[]
-  /** True when the backend cut `entries` at its complete-result bound (the name-sorted tail is absent). */
+  /** True when the backend cut `entries` at its complete-result bound (the ordered tail is absent). */
   truncated: boolean
 }
 
@@ -65,13 +74,14 @@ export interface HostApi {
 
   /**
    * List one directory level for the in-app browser; an absent path lists the
-   * host account's home directory. Only served under the `browse` capability;
-   * unreadable or missing targets fail with `directory-unreadable`. The
-   * carrier's request signal follows the caller, stopping the backend's scan
-   * on disconnect or timeout.
+   * host account's home directory. `includeFiles` adds the child regular
+   * files after the directories, sharing the level's bound. Only served
+   * under the `browse` capability; unreadable or missing targets fail with
+   * `directory-unreadable`. The carrier's request signal follows the caller,
+   * stopping the backend's scan on disconnect or timeout.
    */
   listDirectory(
-    request: RpcRequest<{ path?: string }>,
+    request: RpcRequest<{ path?: string; includeFiles?: boolean }>,
     signal: AbortSignal,
   ): Promise<RpcResponse<DirectoryListing>>
 

@@ -10,6 +10,7 @@
  */
 
 import { mkdir, opendir, stat } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, join, posix, resolve, win32 } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -18,7 +19,7 @@ import {
   DirectoryPicker, DirectoryPickerError,
 } from '@deepseek-ai/dsh-host-directory-picker'
 import type {
-  DirectoryEntry, DirectoryListing, DirectoryPickerCapability,
+  DirectoryEntry, DirectoryListOptions, DirectoryListing, DirectoryPickerCapability,
 } from '@deepseek-ai/dsh-host-directory-picker'
 
 /**
@@ -31,7 +32,7 @@ function ancestryCrumbs(target: string): DirectoryEntry[] {
   for (;;) {
     const parent = dirname(current)
     // basename of a root is '' — label the root crumb by its full path ('/', 'C:\').
-    crumbs.unshift({ name: parent === current ? current : basename(current), path: current, hidden: false })
+    crumbs.unshift({ name: parent === current ? current : basename(current), path: current, hidden: false, kind: 'directory' })
     if (parent === current) return crumbs
     current = parent
   }
@@ -53,40 +54,56 @@ export function fullyQualified(path: string, platform: NodeJS.Platform = process
     : posix.isAbsolute(path)
 }
 
-/** One streamed listing candidate: the dirent facts a row needs, nothing else retained. */
+/**
+ * One streamed listing candidate, fully classified: dirents carry their kind
+ * outright, and a symlink is resolved by its stat probe before it may contend
+ * for the window — the ordering (and therefore the kept head) must be exact,
+ * so a deferred classification cannot re-sort rows across kinds later.
+ */
 export interface ListingCandidate {
   /** Base name within the streamed level. */
   name: string
-  /** Dirent says directory (no probe needed). */
-  isDirectory: boolean
-  /** Dirent says symlink (enterability needs a stat probe). */
-  isSymbolicLink: boolean
+  /** What the child resolves to: a directory (or symlink to one) or a regular file (or symlink to one). */
+  kind: 'directory' | 'file'
 }
 
 /**
- * Insert a streamed candidate into the name-sorted bounded window, evicting
- * the name-largest candidate when the window exceeds `keep`. Memory over an
- * arbitrarily large level therefore stays O(keep) regardless of how many
- * children the directory holds.
- * @param window - the name-ascending window, mutated in place.
+ * The listing order: directories before files, name-ascending inside each
+ * kind. With files excluded every candidate is a directory, so the kind term
+ * is constant and this is the plain name order.
+ * @param a - first candidate.
+ * @param b - second candidate.
+ * @returns a localeCompare-style negative/zero/positive ordering value.
+ */
+function compareCandidates(a: ListingCandidate, b: ListingCandidate): number {
+  const kindOrder = (a.kind === 'file' ? 1 : 0) - (b.kind === 'file' ? 1 : 0)
+  return kindOrder !== 0 ? kindOrder : a.name.localeCompare(b.name)
+}
+
+/**
+ * Insert a streamed candidate into the bounded window ordered by
+ * {@link compareCandidates}, evicting the ordering-largest candidate when the
+ * window exceeds `keep`. Memory over an arbitrarily large level therefore
+ * stays O(keep) regardless of how many children the directory holds.
+ * @param window - the ordered window, mutated in place.
  * @param candidate - the streamed candidate to place.
  * @param keep - the window bound.
  * @returns true when an eviction happened (the level has candidates beyond the window).
  */
 export function boundedInsert(window: ListingCandidate[], candidate: ListingCandidate, keep: number): boolean {
-  // Full window, name at or beyond the tail: one comparison rejects, so an
-  // oversized level costs O(1) per candidate past the head instead of a
+  // Full window, candidate at or beyond the tail: one comparison rejects, so
+  // an oversized level costs O(1) per candidate past the head instead of a
   // window scan (100k children against a 1,001 window must not approach
   // 10^8 comparisons).
   // oxlint-disable-next-line typescript/no-non-null-assertion -- a full window (length === keep >= 1) has a tail
-  if (window.length === keep && candidate.name.localeCompare(window[window.length - 1]!.name) >= 0) return true
+  if (window.length === keep && compareCandidates(candidate, window[window.length - 1]!) >= 0) return true
   // Binary insertion keeps a retained candidate at O(log keep) comparisons.
   let lo = 0
   let hi = window.length
   while (lo < hi) {
     const mid = (lo + hi) >>> 1
     // oxlint-disable-next-line typescript/no-non-null-assertion -- bounded by the loop condition
-    if (candidate.name.localeCompare(window[mid]!.name) < 0) hi = mid
+    if (compareCandidates(candidate, window[mid]!) < 0) hi = mid
     else lo = mid + 1
   }
   window.splice(lo, 0, candidate)
@@ -150,31 +167,39 @@ function messageOf(error: unknown): string {
 }
 
 /**
- * One listing row for a dirent, following symlinks to directories; null for
- * non-directories and broken/cyclic links (skipped silently — the browser
- * shows what can be entered, and a broken link cannot).
+ * Resolve one dirent to its row kind before it may contend for the window:
+ * dirents carry their kind outright, and a symlink's stat probe decides
+ * directory vs file (a file only when the call includes files). Null skips
+ * the child: rows the call does not want, and broken/cyclic links (skipped
+ * silently — a broken link is neither enterable nor a readable file).
+ * @param parent - absolute directory holding the dirent.
+ * @param name - dirent base name.
+ * @param dirent - the streamed directory entry.
+ * @param includeFiles - whether regular files (and symlinks resolving to
+ * files) become rows.
+ * @param signal - caller lifetime; abort rejects the whole listing.
+ * @returns the resolved kind, or null to skip the child.
  */
-async function directoryRow(
-  parent: string, name: string, isDirectory: boolean, isSymbolicLink: boolean, signal: AbortSignal | undefined,
-): Promise<DirectoryEntry | null> {
-  const path = join(parent, name)
-  let enterable = isDirectory
-  if (!enterable && isSymbolicLink) {
-    try {
-      // The probe races the caller too: a symlink target on a stalled
-      // network filesystem must not keep a departed caller's request alive.
-      enterable = (await raceAbort(stat(path), signal)).isDirectory()
-    } catch {
-      /* v8 ignore next 2 -- an abort landing mid-probe needs a stalled stat; the per-candidate check in list covers the settled path. */
-      if (signal?.aborted) throw asError(signal.reason)
-      // Broken or cyclic symlink: stat is the probe, failure means "not enterable".
-      return null
-    }
+async function kindOf(
+  parent: string,
+  name: string,
+  dirent: Dirent,
+  includeFiles: boolean,
+  signal: AbortSignal | undefined,
+): Promise<'directory' | 'file' | null> {
+  if (dirent.isDirectory()) return 'directory'
+  if (dirent.isFile()) return includeFiles ? 'file' : null
+  if (!dirent.isSymbolicLink()) return null
+  try {
+    // The probe races the caller too: a symlink target on a stalled network
+    // filesystem must not keep a departed caller's scan alive.
+    const stats = await raceAbort(stat(join(parent, name)), signal)
+    return stats.isDirectory() ? 'directory' : stats.isFile() && includeFiles ? 'file' : null
+  } catch {
+    /* v8 ignore next 2 -- an abort landing mid-probe needs a stalled stat; the stream loop's own raced reads cover the settled path. */
+    if (signal?.aborted) throw asError(signal.reason)
+    return null
   }
-  if (!enterable) return null
-  // POSIX hidden convention; Windows' hidden attribute is not exposed by
-  // dirents (Known Limitations). The client owns whether hidden rows show.
-  return { name, path, hidden: name.startsWith('.') }
 }
 
 /** Validated plugin configuration. */
@@ -187,10 +212,10 @@ export interface Config {
 export default class BrowseDirectoryPicker extends DirectoryPicker {
   /**
    * `maxEntries` bounds the complete listing level a single `list` call may
-   * materialize and put on the wire: at most this many child-directory rows
-   * (hidden rows included), with `truncated` flagging a cut level. The
-   * default follows GitHub's web UI, which truncates directory listings at
-   * 1,000 entries.
+   * materialize and put on the wire: at most this many child rows (hidden
+   * rows included; directories and, when requested, files share the bound),
+   * with `truncated` flagging a cut level. The default follows GitHub's web
+   * UI, which truncates directory listings at 1,000 entries.
    */
   static Config: z<Config> = z.object({
     maxEntries: z.natural().min(1).default(1000),
@@ -198,7 +223,7 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
 
   private readonly browseCapability: DirectoryPickerCapability = {
     kind: 'browse',
-    list: (path, signal) => this.list(path, signal),
+    list: (path, signal, opts) => this.list(path, signal, opts),
     createDirectory: (path, name) => this.createDirectory(path, name),
   }
 
@@ -214,7 +239,8 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     return this.browseCapability
   }
 
-  private async list(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
+  private async list(path?: string, signal?: AbortSignal, opts?: DirectoryListOptions): Promise<DirectoryListing> {
+    const includeFiles = opts?.includeFiles === true
     const home = homedir()
     // The seam contract takes fully qualified paths only; resolve() would
     // silently rebase a relative or empty wire value under the host process
@@ -223,13 +249,12 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
       throw new DirectoryPickerError('directory-unreadable', path, `cannot list "${path}": not a fully qualified path`)
     }
     const target = resolve(path ?? home)
-    // Stream the level (opendir, one dirent at a time) into a name-sorted
-    // window of maxEntries + 1 candidates: memory stays bounded no matter how
-    // many children the directory holds, the window keeps the name-sorted
-    // head, and the +1 slot lets an in-window extra row prove the cut. A
-    // window candidate that turns out non-enterable (broken symlink) is not
-    // backfilled from beyond the window — an eviction already marks the
-    // level truncated, which stays the honest answer.
+    // Stream the level (opendir, one dirent at a time, each child classified
+    // by kindOf before it contends) into an ordered window of maxEntries + 1
+    // candidates: memory stays bounded no matter how many children the
+    // directory holds, the window keeps the ordered head, and the +1 slot
+    // lets an in-window extra row prove the cut. An eviction already marks
+    // the level truncated, which stays the honest answer.
     const keep = this.config.maxEntries + 1
     const window: ListingCandidate[] = []
     let evicted = false
@@ -254,11 +279,14 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
         for (;;) {
           const dirent = await raceAbort(level.read(), signal)
           if (dirent === null) break
-          // Only rows a browser could enter contend for the window; dirent
-          // says "directory" outright, a symlink needs the later stat probe.
-          if (!dirent.isDirectory() && !dirent.isSymbolicLink()) continue
-          const candidate = { name: dirent.name, isDirectory: dirent.isDirectory(), isSymbolicLink: dirent.isSymbolicLink() }
-          if (boundedInsert(window, candidate, keep)) evicted = true
+          // Classification happens before insertion (symlinks probed here,
+          // raced by the signal): the window order — directories before
+          // files, name-ascending inside each kind — must be exact, so a
+          // child whose kind is not yet known cannot contend. A broken link
+          // is resolved to null here and never enters the window.
+          const kind = await kindOf(target, dirent.name, dirent, includeFiles, signal)
+          if (kind === null) continue
+          if (boundedInsert(window, { name: dirent.name, kind }, keep)) evicted = true
         }
       } finally {
         // Manual read() never auto-closes; close on every exit. The aborted
@@ -282,16 +310,20 @@ export default class BrowseDirectoryPicker extends DirectoryPicker {
     const entries: DirectoryEntry[] = []
     let truncated = evicted
     for (const candidate of window) {
-      // A caller that departed between reads and probes stops before the
-      // next probe (each probe's own await is raced inside directoryRow).
-      signal?.throwIfAborted()
-      const row = await directoryRow(target, candidate.name, candidate.isDirectory, candidate.isSymbolicLink, signal)
-      if (row === null) continue
+      // Candidates left the window fully classified (kindOf ran in-stream),
+      // so the kept head is already the exact ordered head of the level.
       if (entries.length === this.config.maxEntries) {
         truncated = true
         break
       }
-      entries.push(row)
+      // POSIX hidden convention; Windows' hidden attribute is not exposed by
+      // dirents (Known Limitations). The client owns whether hidden rows show.
+      entries.push({
+        name: candidate.name,
+        path: join(target, candidate.name),
+        hidden: candidate.name.startsWith('.'),
+        kind: candidate.kind,
+      })
     }
     return { path: target, home, crumbs: ancestryCrumbs(target), entries, truncated }
   }

@@ -218,10 +218,13 @@ export class WorkspaceRuntime implements IWorkspaces {
    * List one directory level through the Host's `browse` capability.
    * @param path - absolute directory to list; absent lists the Host home directory.
    * @param signal - aborts the wire request (and the Host's scan) when the caller supersedes it.
+   * @param opts - per-call options; `includeFiles` adds the child regular files after the directories.
    * @returns the level's listing with breadcrumb ancestry.
    */
-  async listDirectory(path?: string, signal?: AbortSignal): Promise<DirectoryListing> {
-    const response = await this.api.host.listDirectory(path === undefined ? {} : { path }, signal)
+  async listDirectory(path?: string, signal?: AbortSignal, opts?: { includeFiles?: boolean }): Promise<DirectoryListing> {
+    const payload: { path?: string; includeFiles?: boolean } = path === undefined ? {} : { path }
+    if (opts?.includeFiles === true) payload.includeFiles = true
+    const response = await this.api.host.listDirectory(payload, signal)
     if (!response.result.ok) throw new DirectoryBrowseError(response.result.error)
     return response.result.value
   }

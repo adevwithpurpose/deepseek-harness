@@ -329,16 +329,20 @@ describe('host domain schemas', () => {
   it('validates the browse listing/creation payloads', () => {
     expect(hostListDirectoryRequestSchema.parse({})).toEqual({})
     expect(hostListDirectoryRequestSchema.parse({ path: '/x' })).toEqual({ path: '/x' })
+    expect(hostListDirectoryRequestSchema.parse({ path: '/x', includeFiles: true })).toEqual({ path: '/x', includeFiles: true })
     const listing = hostListDirectoryValueSchema.parse({
       path: '/home/u/p',
       home: '/home/u',
-      crumbs: [{ name: '/', path: '/', hidden: false }, { name: 'p', path: '/home/u/p', hidden: false }],
-      entries: [{ name: '.dot', path: '/home/u/p/.dot', hidden: true }],
+      crumbs: [{ name: '/', path: '/', hidden: false, kind: 'directory' }, { name: 'p', path: '/home/u/p', hidden: false, kind: 'directory' }],
+      entries: [{ name: '.dot', path: '/home/u/p/.dot', hidden: true, kind: 'directory' }, { name: 'a.txt', path: '/home/u/p/a.txt', hidden: false, kind: 'file' }],
       truncated: false,
     })
     expect(listing.entries[0]?.hidden).toBe(true)
-    // The flag is part of the wire value, not an optional decoration.
+    // The flag and the kind are part of the wire value, not optional decoration.
     expect(() => hostListDirectoryValueSchema.parse({ path: '/x', home: '/x', crumbs: [], entries: [] })).toThrow()
+    expect(() => hostListDirectoryValueSchema.parse({
+      path: '/x', home: '/x', crumbs: [], entries: [{ name: 'a', path: '/x/a', hidden: false }],
+    })).toThrow()
     expect(hostCreateDirectoryRequestSchema.parse({ path: '/x', name: 'new' })).toEqual({ path: '/x', name: 'new' })
     for (const name of ['', ' ', '.', '..', 'a/b', 'a\\b']) {
       expect(() => hostCreateDirectoryRequestSchema.parse({ path: '/x', name })).toThrow()

@@ -1604,12 +1604,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     const name = path.slice(path.lastIndexOf('/') + 1)
     return directoryTree.get(parent)?.includes(name) === true ? [] : undefined
   }
-  const crumbsOf = (path: string): { name: string; path: string; hidden: boolean }[] => {
-    const crumbs = [{ name: '/', path: '/', hidden: false }]
+  const crumbsOf = (path: string): { name: string; path: string; hidden: boolean; kind: 'directory' | 'file' }[] => {
+    const crumbs = [{ name: '/', path: '/', hidden: false, kind: 'directory' as const }]
     let acc = ''
     for (const segment of path.split('/').filter(Boolean)) {
       acc += `/${segment}`
-      crumbs.push({ name: segment, path: acc, hidden: false })
+      crumbs.push({ name: segment, path: acc, hidden: false, kind: 'directory' as const })
     }
     return crumbs
   }
@@ -2634,7 +2634,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           home: FIXTURE_HOME,
           crumbs: crumbsOf(target),
           entries: [...children].sort((a, b) => a.localeCompare(b))
-            .map(name => ({ name, path: target === '/' ? `/${name}` : `${target}/${name}`, hidden: name.startsWith('.') })),
+            .map(name => ({ name, path: target === '/' ? `/${name}` : `${target}/${name}`, hidden: name.startsWith('.'), kind: 'directory' as const })),
           // The fixture tree is tiny; no level ever reaches a backend bound.
           truncated: false,
         })

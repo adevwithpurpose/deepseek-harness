@@ -161,14 +161,14 @@ describe('host.pickDirectory', () => {
 /** Canned browse capability: one listing, one created path, typed failures on demand. */
 const BROWSE_STUB: DirectoryPickerCapability = {
   kind: 'browse',
-  list: async (path) => {
+  list: async (path, _signal, _opts) => {
     if (path === '/denied') throw new DirectoryPickerError('directory-unreadable', '/denied', 'cannot list /denied')
     const target = path ?? '/home/user'
     return {
       path: target,
       home: '/home/user',
-      crumbs: [{ name: '/', path: '/', hidden: false }],
-      entries: [{ name: 'projects', path: `${target}/projects`, hidden: false }],
+      crumbs: [{ name: '/', path: '/', hidden: false, kind: 'directory' }],
+      entries: [{ name: 'projects', path: `${target}/projects`, hidden: false, kind: 'directory' }],
       truncated: false,
     }
   },
@@ -188,6 +188,27 @@ describe('host.listDirectory / host.createDirectory', () => {
     expect(listed.result).toMatchObject({ ok: true, value: { path: '/home/user/projects' } })
     const created = await api.host.createDirectory(request({ path: '/home/user', name: 'fresh' }))
     expect(created.result).toEqual({ ok: true, value: { path: '/home/user/fresh' } })
+  })
+
+  it('forwards includeFiles to the browse capability', async () => {
+    const seen: (boolean | undefined)[] = []
+    const { api } = await harness(undefined, {
+      kind: 'browse',
+      list: async (path, _signal, opts) => {
+        seen.push(opts?.includeFiles)
+        return {
+          path: path ?? '/home/user',
+          home: '/home/user',
+          crumbs: [{ name: '/', path: '/', hidden: false, kind: 'directory' }],
+          entries: [],
+          truncated: false,
+        }
+      },
+      createDirectory: async (path, name) => `${path}/${name}`,
+    })
+    await api.host.listDirectory(request({}), new AbortController().signal)
+    await api.host.listDirectory(request({ includeFiles: true }), new AbortController().signal)
+    expect(seen).toEqual([undefined, true])
   })
 
   it('maps typed picker failures onto the wire error codes and folds unknown throws to internal', async () => {

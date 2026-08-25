@@ -24,7 +24,10 @@ export interface DirectoryPickerNativeCapability {
   pick(signal: AbortSignal): Promise<string | null>
 }
 
-/** One directory row: a listing child or a breadcrumb ancestor. */
+/**
+ * One listing row: a child directory or — when the call asked for files — a
+ * child regular file, or a breadcrumb ancestor.
+ */
 export interface DirectoryEntry {
   /** Base name shown in a browser row (a root crumb carries its full path). */
   name: string
@@ -32,6 +35,8 @@ export interface DirectoryEntry {
   path: string
   /** Hidden by the host platform's convention (dot-prefixed on POSIX); the client owns whether to show it. */
   hidden: boolean
+  /** What the row names: a child directory (or a symlink resolving to one) or a child regular file. */
+  kind: 'directory' | 'file'
 }
 
 /** One directory level plus its ancestry, as a browse backend reports it. */
@@ -42,10 +47,15 @@ export interface DirectoryListing {
   home: string
   /**
    * Ancestor chain from the filesystem root to the listed directory
-   * inclusive; every crumb is a jump target (crumb `hidden` is always false).
+   * inclusive; every crumb is a jump target (crumb `hidden` is always false,
+   * crumb `kind` is always `'directory'`).
    */
   crumbs: DirectoryEntry[]
-  /** Direct child directories, name-sorted; symlinks to directories included. */
+  /**
+   * Direct child directories name-sorted (symlinks to directories included),
+   * followed by the direct child regular files name-sorted when the call set
+   * `includeFiles`.
+   */
   entries: DirectoryEntry[]
   /**
    * True when the backend cut `entries` at its complete-result bound: the
@@ -53,6 +63,18 @@ export interface DirectoryListing {
    * the name-sorted tail (hidden rows count toward the bound).
    */
   truncated: boolean
+}
+
+/**
+ * Per-call options of one browse listing level.
+ */
+export interface DirectoryListOptions {
+  /**
+   * Also report direct child regular files after the directories. Absent or
+   * false keeps the listing directories-only — the directory-picker flows
+   * never set it.
+   */
+  includeFiles?: boolean
 }
 
 /**
@@ -68,13 +90,15 @@ export interface DirectoryPickerBrowseCapability {
    * @param signal - caller lifetime; abort stops the scan (a stalled network
    * directory must not outlive a disconnected caller) and rejects with the
    * abort reason.
+   * @param opts - per-call options; `includeFiles` adds child regular files
+   * after the directories, sharing the level's bound and `truncated` flag.
    * @returns the level's listing with ancestry; backends bound the complete
    * result, and a cut level reports `truncated`.
    * @throws {DirectoryPickerError} `directory-unreadable` when the target is not fully
    * qualified (a wire value must never resolve against the host cwd or, on
    * Windows, its current drive) or cannot be listed.
    */
-  list(path?: string, signal?: AbortSignal): Promise<DirectoryListing>
+  list(path?: string, signal?: AbortSignal, opts?: DirectoryListOptions): Promise<DirectoryListing>
   /**
    * Create one child directory under an existing parent.
    * @param path - absolute existing parent directory.

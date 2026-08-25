@@ -51,10 +51,50 @@ describe('BrowseDirectoryPicker', () => {
     expect(listing.home).toBe(homedir())
     expect(listing.entries.map(entry => entry.name)).toEqual(['.hidden-dir', 'linked', 'projects'])
     expect(listing.entries.map(entry => entry.hidden)).toEqual([true, false, false])
+    // Without includeFiles every row is a directory; notes.txt stays absent.
+    expect(listing.entries.map(entry => entry.kind)).toEqual(['directory', 'directory', 'directory'])
     // Every entry path is absolute and host-joined — clients never join segments.
     expect(listing.entries.every(entry => entry.path === join(root, entry.name))).toBe(true)
     // Well under the default bound: the complete level, not a cut one.
     expect(listing.truncated).toBe(false)
+  })
+
+  it('includeFiles appends child files after the directories, sharing the level bound', async () => {
+    const listing = await capability.list(root, undefined, { includeFiles: true })
+    const names = listing.entries.map(entry => entry.name)
+    // Directories first (name-sorted), then files (name-sorted); the broken
+    // link is still skipped, and the file symlink appears only where the
+    // platform allowed creating it.
+    expect(names).toContain('.hidden-dir')
+    expect(names).toContain('linked')
+    expect(names).toContain('projects')
+    expect(names).toContain('notes.txt')
+    expect(names).not.toContain('broken')
+    const kinds = listing.entries.map(entry => entry.kind)
+    const fileIndex = listing.entries.findIndex(entry => entry.name === 'notes.txt')
+    expect(kinds[fileIndex]).toBe('file')
+    // The directory block is contiguous at the front: no file row precedes a
+    // directory row.
+    expect(kinds.lastIndexOf('directory')).toBeLessThan(kinds.indexOf('file'))
+    const fileLink = listing.entries.find(entry => entry.name === 'file-link')
+    if (fileLink !== undefined) expect(fileLink.kind).toBe('file')
+    // The crumbs stay all-directories.
+    expect(listing.crumbs.every(crumb => crumb.kind === 'directory')).toBe(true)
+    expect(listing.truncated).toBe(false)
+    // A bounded level cuts the combined ordered set: bound one keeps only
+    // the first directory, and the files beyond the bound stay absent.
+    const ctx = new Context()
+    const fiber = ctx.plugin(BrowseDirectoryPicker, { maxEntries: 1 })
+    await fiber.await()
+    const bounded = ctx.get('directoryPicker')!.capability()
+    if (bounded.kind !== 'browse') throw new Error('browse backend must advertise the browse capability')
+    try {
+      const cut = await bounded.list(root, undefined, { includeFiles: true })
+      expect(cut.entries.map(entry => entry.name)).toEqual(['.hidden-dir'])
+      expect(cut.truncated).toBe(true)
+    } finally {
+      await fiber.dispose()
+    }
   })
 
   it('cuts a level at maxEntries keeping the name-sorted head, and flags the cut', async () => {
@@ -136,8 +176,8 @@ describe('BrowseDirectoryPicker', () => {
     }
   })
 
-  it('boundedInsert keeps the window name-sorted and bounded, reporting evictions', () => {
-    const candidate = (name: string): ListingCandidate => ({ name, isDirectory: true, isSymbolicLink: false })
+  it('boundedInsert keeps the window ordered and bounded, reporting evictions', () => {
+    const candidate = (name: string, kind: 'directory' | 'file' = 'directory'): ListingCandidate => ({ name, kind })
     const window: ListingCandidate[] = []
     expect(boundedInsert(window, candidate('m'), 2)).toBe(false)
     expect(boundedInsert(window, candidate('z'), 2)).toBe(false)
@@ -149,6 +189,12 @@ describe('BrowseDirectoryPicker', () => {
     expect(window.map(entry => entry.name)).toEqual(['a', 'm'])
     expect(boundedInsert(window, candidate('m'), 2)).toBe(true)
     expect(window.map(entry => entry.name)).toEqual(['a', 'm'])
+    // Files order after directories regardless of name.
+    const mixed: ListingCandidate[] = []
+    boundedInsert(mixed, candidate('z'), 3)
+    boundedInsert(mixed, candidate('a', 'file'), 3)
+    boundedInsert(mixed, candidate('b'), 3)
+    expect(mixed.map(entry => entry.name)).toEqual(['b', 'z', 'a'])
   })
 
   it('reports the ancestry as jump-target crumbs ending at the listed directory', async () => {

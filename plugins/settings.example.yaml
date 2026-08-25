@@ -18,6 +18,9 @@ llm-pi-ai:
       retryPolicy:
         mode: normal
         maxRetries: 3
+      defaultInput:
+        - text
+        - image
       models:
         - id: oc/big-pickle
           name: oc/Big Pickle
