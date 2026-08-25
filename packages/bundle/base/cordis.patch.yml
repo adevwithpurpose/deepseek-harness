@@ -227,13 +227,16 @@
     - id: lsp
       name: '@deepseek-ai/dsh-lsp'
 
+    # Opt-in: lsp-stdio requires at least one configured language server, so
+    # the base ships it (and its model-facing tool) disabled. A deployment
+    # enables both with real `servers` config; see examples/headless-agent.
     - id: lsp-stdio
       name: '@deepseek-ai/dsh-lsp-stdio'
-      config:
-        servers: {}
+      disabled: true
 
     - id: tool-lsp
       name: '@deepseek-ai/dsh-tool-lsp'
+      disabled: true
 
     - id: tool-fs-search
       name: '@deepseek-ai/dsh-tool-fs-search'
