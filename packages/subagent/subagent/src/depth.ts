@@ -12,6 +12,8 @@ declare module '@deepseek-ai/dsh-agent' {
   interface AgentOptions {
     /** Delegation depth: zero for a top-level agent and parent depth + 1 for a child. */
     subagentDepth?: number
+    /** Canonical file/directory prefixes this agent may mutate. */
+    writeScope?: readonly string[]
   }
 }
 

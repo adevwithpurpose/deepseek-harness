@@ -37,6 +37,10 @@ Three `fs/*` events (declared by `@deepseek-ai/dsh-fs`, dispatched by `@deepseek
 | `fs/edit-intent` | Unseen → `FS_NOT_OBSERVED`; observed absent → `FS_NOT_FOUND`; observed present → `{ version: vObserved }` as the CAS basis. Single-slot decision; does NOT call `next()`. |
 | `fs/observed` | Records `{ kind: 'present', version }` or `{ kind: 'absent' }` for this owner+target. Synchronous, side-effect-only `WeakMap.set`. |
 
+## Child write scope
+
+When the event actor's agent carries an `AgentOptions.writeScope` list (set by a routed subagent task route), every `fs/write-intent` and `fs/edit-intent` decision first requires the target to fall inside one scope entry. Matching runs against the target's canonical identity (`FsTarget.targetKey`, the provider's realpath), never the caller-supplied display path, so an in-scope symlinked path cannot widen the scope to the link's destination. A trailing `/**` marks a directory subtree; a plain entry requires an exact path or a `/`-bounded descendant, so a sibling name (`src` vs `src-evil`) does not match. An explicit empty list denies every mutation; an actor with no declared scope keeps the unscoped behavior. Out-of-scope mutations throw `FS_WRITE_SCOPE`, which `@deepseek-ai/dsh-tool-fs` remediates with a model-facing recovery hint.
+
 ## Observed state is the prior-observation record; freshness is provider CAS
 
 Observed state is a weak owner-to-target map with three logical states: unseen, confirmed absent, or present at a version. A successful file read or mutation records presence; a metadata miss from `read` or the `str_replace_editor` `view`, `str_replace`, or `insert` command records absence before returning `FS_NOT_FOUND`. The plugin performs no filesystem I/O: it converts that state into a provider guard. Presence supplies the observed version, while absence lets only a `createIfAbsent` write proceed; edit has no version basis and returns `FS_NOT_FOUND`. A windowed read observes the whole file version, so a later targeted edit is allowed only while that file remains unchanged. State is discarded on plugin disposal and is not persisted across sessions.

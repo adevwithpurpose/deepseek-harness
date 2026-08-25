@@ -12,6 +12,34 @@ import { FsError } from '@deepseek-ai/dsh-fs'
 import type { FsObservation, FsTarget, FsVersion, FsWriteIntent } from '@deepseek-ai/dsh-fs'
 import type { FsObservationActor } from './types.ts'
 
+/**
+ * Normalize one scope entry to a forward-slash directory prefix. A trailing
+ * `/**` glob marker is stripped; a plain prefix keeps its exact form so the
+ * matcher can require the `/` boundary itself.
+ */
+function scopePrefix(entry: string): string {
+  const normalized = entry.replaceAll('\\', '/')
+  return normalized.endsWith('/**') ? normalized.slice(0, -2) : normalized
+}
+
+/**
+ * Whether the target's canonical identity falls inside the actor's declared
+ * write scope. The match runs against `FsTarget.targetKey` — the provider's
+ * realpath-derived identity — never against `displayPath`: an in-scope
+ * symlinked path must not widen the scope to whatever the link points at.
+ * An empty scope denies every mutation (explicit read-only).
+ */
+function inWriteScope(target: FsTarget, actor: object | undefined): boolean {
+  const agent = actor === undefined ? undefined : (actor as FsObservationActor).agent
+  const scope = agent?.options?.writeScope
+  if (scope === undefined) return true
+  const canonical = String(target.targetKey).replaceAll('\\', '/')
+  return scope.some((raw) => {
+    const prefix = scopePrefix(raw)
+    return canonical === prefix || canonical.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`)
+  })
+}
+
 export type { FsObservationActor } from './types.ts'
 
 /**
@@ -63,6 +91,7 @@ class ObservedStateGate {
    * confirmed present ⇒ `replaceIfVersion` at the observed version.
    */
   writeIntent(target: FsTarget, actor: object | undefined): FsWriteIntent {
+    if (!inWriteScope(target, actor)) throw new FsError(`write is outside the child write scope for "${target.displayPath}"`, 'FS_WRITE_SCOPE')
     const owner = this.owner(actor)
     const prior = owner ? this.get(owner, target.targetKey) : undefined
     return prior?.kind === 'present'
@@ -76,6 +105,7 @@ class ObservedStateGate {
    * observed version as the CAS basis.
    */
   editIntent(target: FsTarget, actor: object | undefined): { version: FsVersion } {
+    if (!inWriteScope(target, actor)) throw new FsError(`edit is outside the child write scope for "${target.displayPath}"`, 'FS_WRITE_SCOPE')
     const owner = this.owner(actor)
     const prior = owner ? this.get(owner, target.targetKey) : undefined
     if (!owner || prior === undefined) {

@@ -333,6 +333,12 @@ export const FailoverNodeView = memo(function FailoverNodeView({ node, t }: Chat
   )
 })
 
+/** Model-route selection keyed Chat renderer. */
+export const RouteSelectedNodeView = memo(function RouteSelectedNodeView({ node, t }: ChatNodeViewProps<'model-route-selected'>) {
+  const value = node.data.route
+  return <div className={css.retryRow} role="status">{t('message.routeSelected.label', { route: value.routeId, provider: value.provider, model: value.model })}</div>
+})
+
 export const RetryNodeView = memo(function RetryNodeView({ node, t }: ChatNodeViewProps<'model-retry'>) {
   const data = node.data
   return <ModelRetryItem node={data.current} active={data.current.retryState === 'scheduled'} t={t} />

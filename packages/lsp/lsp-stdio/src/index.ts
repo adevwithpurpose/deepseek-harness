@@ -33,6 +33,7 @@ export {
   negotiatePositionEncoding,
   normalizeHover,
   normalizeLocations,
+  normalizeRename,
   requestMethod,
   supportsOperation,
   supportsTransientOpen,

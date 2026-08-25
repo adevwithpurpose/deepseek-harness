@@ -309,6 +309,13 @@ function legacyContribution(raw: ChatConversationViewNode): LegacyContribution {
         partial: null,
         running: null,
       }
+    case 'model-route-selected':
+      return {
+        anchorSeq: node.anchorSeq,
+        nodes: [node.data.route],
+        partial: null,
+        running: null,
+      }
     case 'turn-tail':
       return EMPTY_CONTRIBUTION
     default:

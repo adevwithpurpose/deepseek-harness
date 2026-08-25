@@ -47,6 +47,11 @@ export interface ManualCompactionChatData {
 /** One durable model failover rendered as a single row. */
 export interface FailoverChatData { readonly transition: ModelFailoverNode }
 
+/** One durable model-route selection rendered as a single row. */
+export interface RouteSelectedChatData {
+  readonly route: import('@deepseek-ai/dsh-client-runtime/client').ModelRouteSelectedNode
+}
+
 /** One durable retry chain rendered as a single row. */
 export interface RetryChatData {
   readonly attempts: readonly ModelRetryNode[]

@@ -307,13 +307,15 @@ describe('dsh-tool-subagent', () => {
     })
 
     const schema = ctx.tools.schemas().find(item => item.name === 'subagent')
-    expect(schema?.parameters.properties?.['route']).toMatchObject({ enum: ['fast', 'verify'] })
+    const properties = schema?.parameters.properties as Record<string, unknown> | undefined
+    expect(properties?.['route']).toMatchObject({ enum: ['fast', 'verify'] })
     await callSubagent(ctx, { description: 'd', prompt: 'p', route: 'verify' })
     expect(seen?.agentOptions).toEqual({
       provider: 'p',
       model: 'v1',
       modelRouteId: 'verify',
       modelRoutes: [{ provider: 'p', model: 'v1' }, { provider: 'p', model: 'v2' }],
+      writeScope: [],
     })
   })
 

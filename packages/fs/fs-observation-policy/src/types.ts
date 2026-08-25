@@ -25,5 +25,7 @@ export interface FsObservationActor {
   agent?: {
     /** The session that owns observed-file state, used as an opaque key. */
     session?: object
+    /** Child write scope; absent on top-level agents. */
+    options?: { writeScope?: readonly string[] }
   }
 }

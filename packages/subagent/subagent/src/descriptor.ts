@@ -45,7 +45,7 @@ declare module '@deepseek-ai/dsh-session/types' {
  * Supporting another composition input is a deliberate version change, never
  * an implicit extra field.
  */
-export const SUBAGENT_DESCRIPTOR_VERSION = 4
+export const SUBAGENT_DESCRIPTOR_VERSION = 6
 
 /** Fields shared by every supported `subagent/descriptor` payload. */
 interface SubagentDescriptorBase {
@@ -81,6 +81,12 @@ export interface ContinuableSubagentDescriptorData extends SubagentDescriptorBas
   readonly modelRouteId?: string
   /** Ordered provider/model candidates retained for failover across cold resume. */
   readonly modelRoutes?: readonly AgentModelRoute[]
+  /** Route-owned output-token budget retained for cold resume. */
+  readonly modelRouteMaxTokens?: number
+  /** Route-owned attempt budget retained for cold resume. */
+  readonly modelRouteMaxAttempts?: number
+  /** Canonical file/directory prefixes retained for child write enforcement. */
+  readonly writeScope?: readonly string[]
   /** Child preset mounted instead of inheriting the parent's preset. */
   readonly agentPreset?: string
   /** Per-child persona that shadows the deployment persona on resume. */
@@ -122,6 +128,12 @@ export interface ContinuableSubagentDescriptorInput extends SubagentDescriptorIn
   readonly modelRouteId?: string
   /** Requested ordered provider/model candidates. */
   readonly modelRoutes?: readonly AgentModelRoute[]
+  /** Requested route-owned output-token budget. */
+  readonly modelRouteMaxTokens?: number
+  /** Requested route-owned attempt budget. */
+  readonly modelRouteMaxAttempts?: number
+  /** Requested canonical file/directory prefixes for child write enforcement. */
+  readonly writeScope?: readonly string[]
   /** Requested child preset mounted instead of inheriting the parent preset. */
   readonly agentPreset?: string
   /** Requested per-child persona. */
@@ -148,6 +160,9 @@ const CONTINUABLE_DESCRIPTOR_KEYS = new Set([
   'agentModel',
   'modelRouteId',
   'modelRoutes',
+  'modelRouteMaxTokens',
+  'modelRouteMaxAttempts',
+  'writeScope',
   'agentPreset',
   'persona',
   'toolFilter',
@@ -265,6 +280,21 @@ function parseSubagentDescriptor(value: unknown): SubagentDescriptorData | undef
   const modelRoutes = Object.hasOwn(value, 'modelRoutes')
     ? parseModelRoutes(value['modelRoutes'])
     : undefined
+  const modelRouteMaxTokens = Object.hasOwn(value, 'modelRouteMaxTokens')
+    ? value['modelRouteMaxTokens']
+    : undefined
+  if (modelRouteMaxTokens !== undefined && (typeof modelRouteMaxTokens !== 'number' || !Number.isSafeInteger(modelRouteMaxTokens) || modelRouteMaxTokens < 1)) {
+    throw new Error('persisted subagent descriptor modelRouteMaxTokens must be a positive safe integer')
+  }
+  const rawModelRouteMaxAttempts = Object.hasOwn(value, 'modelRouteMaxAttempts') ? value['modelRouteMaxAttempts'] : undefined
+  if (rawModelRouteMaxAttempts !== undefined && (typeof rawModelRouteMaxAttempts !== 'number' || !Number.isSafeInteger(rawModelRouteMaxAttempts) || rawModelRouteMaxAttempts < 1)) {
+    throw new Error('persisted subagent descriptor modelRouteMaxAttempts must be a positive safe integer')
+  }
+  const modelRouteMaxAttempts = rawModelRouteMaxAttempts
+  const rawWriteScope = Object.hasOwn(value, 'writeScope') ? value['writeScope'] : undefined
+  const writeScope = rawWriteScope === undefined ? undefined
+    : Array.isArray(rawWriteScope) && rawWriteScope.every(item => typeof item === 'string') ? rawWriteScope : null
+  if (writeScope === null) throw new Error('persisted subagent descriptor writeScope must be an array of strings')
   const agentPreset = optionalString(value, 'agentPreset')
   const persona = optionalString(value, 'persona')
   const toolFilter = Object.hasOwn(value, 'toolFilter')
@@ -279,6 +309,9 @@ function parseSubagentDescriptor(value: unknown): SubagentDescriptorData | undef
     ...agentModel !== undefined ? { agentModel } : {},
     ...modelRouteId !== undefined ? { modelRouteId } : {},
     ...modelRoutes !== undefined ? { modelRoutes } : {},
+    ...modelRouteMaxTokens !== undefined ? { modelRouteMaxTokens } : {},
+    ...modelRouteMaxAttempts !== undefined ? { modelRouteMaxAttempts } : {},
+    ...writeScope !== undefined ? { writeScope } : {},
     ...agentPreset !== undefined ? { agentPreset } : {},
     ...persona !== undefined ? { persona } : {},
     ...toolFilter !== undefined ? { toolFilter } : {},
@@ -323,6 +356,9 @@ export function snapshotSubagentDescriptor(input: SubagentDescriptorInput): Suba
       ...input.agentModel !== undefined ? { agentModel: input.agentModel } : {},
       ...input.modelRouteId !== undefined ? { modelRouteId: input.modelRouteId } : {},
       ...input.modelRoutes !== undefined ? { modelRoutes: input.modelRoutes } : {},
+      ...input.modelRouteMaxTokens !== undefined ? { modelRouteMaxTokens: input.modelRouteMaxTokens } : {},
+      ...input.modelRouteMaxAttempts !== undefined ? { modelRouteMaxAttempts: input.modelRouteMaxAttempts } : {},
+      ...input.writeScope !== undefined ? { writeScope: input.writeScope } : {},
       ...input.agentPreset !== undefined ? { agentPreset: input.agentPreset } : {},
       ...input.persona !== undefined ? { persona: input.persona } : {},
       ...input.toolFilter !== undefined ? { toolFilter: input.toolFilter } : {},

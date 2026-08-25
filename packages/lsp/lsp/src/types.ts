@@ -10,11 +10,11 @@
 import type { LspProviderId } from './brand.ts'
 
 /**
- * The four semantic queries the seam and model expose. A closed union: adding an operation is a
+ * The five semantic queries the seam and model expose. A closed union: adding an operation is a
  * compile-enforced change across the seam, providers, and the tool. Symbols and call hierarchy are
  * not operations here; they need different schemas.
  */
-export type LspOperation = 'goToDefinition' | 'findReferences' | 'goToImplementation' | 'hover'
+export type LspOperation = 'goToDefinition' | 'findReferences' | 'goToImplementation' | 'hover' | 'prepareRename'
 
 /** A zero-based UTF-16 cursor coordinate, matching the LSP wire convention. */
 export interface LspPosition {
@@ -85,6 +85,7 @@ export interface LspHover {
 export type LspQueryResult =
   | { readonly kind: 'locations'; readonly locations: readonly LspLocation[]; readonly resolvedWorkspaceUri: string }
   | { readonly kind: 'hover'; readonly hover: LspHover | null }
+  | { readonly kind: 'rename'; readonly range: LspRange; readonly placeholder: string }
 
 /**
  * A language-server backend registered on `ctx.lsp`. Each provider owns a stable {@link

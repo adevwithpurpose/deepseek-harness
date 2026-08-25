@@ -26,6 +26,7 @@ import {
   LSP_OPERATIONS,
   parseLspArgs,
   presentLspCall,
+  formatRename,
 } from './render.ts'
 import { sessionCwd } from './session-cwd.ts'
 
@@ -37,6 +38,7 @@ export {
   LSP_OPERATIONS,
   parseLspArgs,
   presentLspCall,
+  formatRename,
   renderUri,
 } from './render.ts'
 export { sessionCwd } from './session-cwd.ts'
@@ -106,13 +108,13 @@ export function apply(ctx: Context, config: Config): void {
   ctx.tools.register(defineTool({
     name: 'lsp',
     description:
-      'Query a language server for precise code navigation. operation is one of goToDefinition, findReferences, goToImplementation, hover. line and character are one-based UTF-16 cursor coordinates. findReferences includes the declaration.',
+      'Query a language server for precise code navigation or a safe rename preview. operation is one of goToDefinition, findReferences, goToImplementation, hover, prepareRename. line and character are one-based UTF-16 cursor coordinates. findReferences includes the declaration.',
     parameters: {
       operation: {
         type: 'string',
         required: true,
         enum: [...LSP_OPERATIONS],
-        description: 'goToDefinition, findReferences, goToImplementation, or hover.',
+        description: 'goToDefinition, findReferences, goToImplementation, hover, or prepareRename.',
       },
       file_path: { type: 'string', required: true, description: 'The source file to query, relative to the workspace or absolute.' },
       line: { type: 'number', required: true, description: 'One-based line of the cursor.' },
@@ -162,6 +164,15 @@ export function apply(ctx: Context, config: Config): void {
               },
             },
           },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              kind: { type: 'string', required: true, const: 'rename' },
+              range: { ...LSP_RANGE_OUTPUT_SCHEMA, required: true },
+              placeholder: { type: 'string', required: true },
+            },
+          },
         ],
       },
       render: (_args, value) => {
@@ -170,6 +181,8 @@ export function apply(ctx: Context, config: Config): void {
             return [{ type: 'text', text: formatLocations(value.locations, value.resolvedWorkspaceUri, resolved.maxLocations, resolved.maxResultChars) }]
           case 'hover':
             return [{ type: 'text', text: formatHover(value.hover, resolved.maxResultChars) }]
+          case 'rename':
+            return [{ type: 'text', text: formatRename(value.range, value.placeholder, resolved.maxResultChars) }]
           /* v8 ignore next -- exhaustive over the output schema's closed union; unreachable. */
           default:
             return assertNever(value, 'tool-lsp output')
@@ -218,6 +231,15 @@ export function apply(ctx: Context, config: Config): void {
                     },
                   },
               },
+          }
+        case 'rename':
+          return {
+            kind: 'rename' as const,
+            range: {
+              start: { line: result.range.start.line, character: result.range.start.character },
+              end: { line: result.range.end.line, character: result.range.end.character },
+            },
+            placeholder: result.placeholder,
           }
         /* v8 ignore next -- exhaustive over the closed LspQueryResult union; unreachable. */
         default:

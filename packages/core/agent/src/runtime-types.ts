@@ -40,6 +40,12 @@ export interface AgentOptions {
   modelRouteId?: string
   /** Ordered provider/model candidates; the first route is the initial request route. */
   modelRoutes?: readonly AgentModelRoute[]
+  /** Maximum distinct model candidates attempted for one failed step. */
+  modelRouteMaxAttempts?: number
+  /** Route-owned output-token budget retained for continuable child resumes. */
+  modelRouteMaxTokens?: number
+  /** Canonical file/directory prefixes this child may mutate; an empty list is read-only. */
+  writeScope?: readonly string[]
 }
 
 /** Options for {@link Agent.cancel}. */

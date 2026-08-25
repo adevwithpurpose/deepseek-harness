@@ -144,7 +144,17 @@ export interface ContextMessageNode {
   form: KnownContextForm | null
 }
 
-/** Durable notice that a closed failed step is waiting for a model-request retry. */
+/** Durable role model-route selection recorded when a routed child starts. */
+export interface ModelRouteSelectedNode {
+  kind: 'model-route-selected'
+  seq: number
+  time: number
+  routeId: string
+  provider: string
+  model: string
+  candidates: number
+}
+
 /** Durable role model-route transition after a failed request. */
 export interface ModelFailoverNode {
   kind: 'model-failover'
@@ -302,6 +312,7 @@ export type ConversationNode =
   | SteeringMessageNode
   | ContextMessageNode
   | ModelRetryNode
+  | ModelRouteSelectedNode
   | ModelFailoverNode
   | TurnErrorNode
   | TurnMaxTokensNode

@@ -23,6 +23,7 @@ import {
   negotiatePositionEncoding,
   normalizeHover,
   normalizeLocations,
+  normalizeRename,
   requestMethod,
   supportsOperation,
   supportsTransientOpen,
@@ -243,6 +244,10 @@ export class LspInstance {
   private normalize(operation: LspOperation, payload: unknown): LspQueryResult {
     if (operation === 'hover') {
       return { kind: 'hover', hover: normalizeHover(payload) }
+    }
+    if (operation === 'prepareRename') {
+      const rename = normalizeRename(payload)
+      return { kind: 'rename', range: rename.range, placeholder: rename.placeholder }
     }
     // The filesystem provider owns URI syntax for the execution platform, which may differ from the
     // harness host. Preserve that coordinate through rendering instead of reparsing `spec.cwd` there.

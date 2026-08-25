@@ -52,6 +52,12 @@ export interface WireHover {
   readonly range?: WireRange
 }
 
+/** A prepareRename response, with an optional placeholder. */
+export interface WireRename {
+  readonly range: WireRange
+  readonly placeholder?: string
+}
+
 /** The legacy enum form of `textDocumentSync` (`0` None, `1` Full, `2` Incremental). */
 export type WireTextDocumentSyncKind = 0 | 1 | 2
 
@@ -72,6 +78,7 @@ export interface WireServerCapabilities {
   readonly referencesProvider?: WireProviderCapability
   readonly implementationProvider?: WireProviderCapability
   readonly hoverProvider?: WireProviderCapability
+  readonly renameProvider?: WireProviderCapability
 }
 
 /** The `initialize` result envelope. */

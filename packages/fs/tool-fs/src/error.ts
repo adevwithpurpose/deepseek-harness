@@ -14,6 +14,7 @@ import type { FsErrorCode } from '@deepseek-ai/dsh-fs'
 const REMEDIES: Partial<Record<FsErrorCode, string>> = {
   FS_STALE_VERSION: 're-read the file, then retry',
   FS_NOT_OBSERVED: 'read the file, then retry',
+  FS_WRITE_SCOPE: 'ask the parent agent for a matching write scope or choose a file inside your assigned scope',
 }
 
 /**

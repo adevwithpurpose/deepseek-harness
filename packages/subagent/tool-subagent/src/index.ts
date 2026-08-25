@@ -25,13 +25,20 @@ export const inject = ['tools', 'subagents', 'systemPrompt']
 /** Prompt order after bounded delegation policy and before child reporting. */
 const SUBAGENT_SECTION_ORDER = 116.5
 
-/** Config: which registered provider this tool delegates to, plus child defaults. */
 /** One allowlisted task route and its ordered model candidates. */
 export interface TaskRouteConfig {
   /** Concise model-facing guidance for selecting this route. */
   description: string
   /** Ordered provider/model candidates, primary first. */
   models: AgentModelRoute[]
+  /** Maximum output tokens for each child request on this route. */
+  maxTokens?: number
+  /** Maximum distinct model candidates tried for one failed child step. */
+  maxAttempts?: number
+  /** Whether the route may mutate managed filesystem targets. */
+  writeAccess?: boolean
+  /** Canonical file/directory prefixes the route may mutate when write access is enabled. */
+  writeScope?: string[]
 }
 
 export interface Config {
@@ -97,7 +104,11 @@ export const Config: z<Config> = z.object({
   routes: z.dict(z.object({
     description: z.string().required(),
     models: z.array(z.object({ provider: z.string().required(), model: z.string().required() })).required(),
-  })).default(undefined as unknown as Record<string, TaskRouteConfig>),
+    maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+    maxAttempts: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+    writeAccess: z.boolean(),
+    writeScope: z.array(z.string()),
+  })).default(undefined as never),
   defaultRoute: z.string(),
   toolName: z.string().default('subagent'),
   enableRunInBackground: z.boolean().default(true),
@@ -441,8 +452,14 @@ export function apply(ctx: Context, config: Config): void {
           return {
             provider: firstRoute.provider,
             model: firstRoute.model,
+            ...selectedRoute.maxTokens === undefined ? {} : {
+              maxTokens: selectedRoute.maxTokens,
+              modelRouteMaxTokens: selectedRoute.maxTokens,
+            },
+            ...selectedRoute.maxAttempts === undefined ? {} : { modelRouteMaxAttempts: selectedRoute.maxAttempts },
             modelRouteId: routeId,
             modelRoutes: selectedRoute.models,
+            writeScope: selectedRoute.writeAccess ? (selectedRoute.writeScope ?? []) : [],
           } satisfies AgentOptions
         })()
         const routedOptions: AgentOptions | undefined = selectedOptions ?? config.agentOptions

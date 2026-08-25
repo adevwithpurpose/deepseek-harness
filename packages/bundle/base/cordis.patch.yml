@@ -224,6 +224,17 @@
     - id: tool-fs
       name: '@deepseek-ai/dsh-tool-fs'
 
+    - id: lsp
+      name: '@deepseek-ai/dsh-lsp'
+
+    - id: lsp-stdio
+      name: '@deepseek-ai/dsh-lsp-stdio'
+      config:
+        servers: {}
+
+    - id: tool-lsp
+      name: '@deepseek-ai/dsh-tool-lsp'
+
     - id: tool-fs-search
       name: '@deepseek-ai/dsh-tool-fs-search'
       config:

@@ -190,6 +190,8 @@ export async function applyChildComposition(
     installModelChain(childCtx, {
       ...options.modelRouteId === undefined ? {} : { routeId: options.modelRouteId },
       routes: options.modelRoutes,
+      ...options.modelRouteMaxAttempts === undefined ? {} : { maxAttempts: options.modelRouteMaxAttempts },
+      ...options.modelRouteMaxTokens === undefined ? {} : { maxTokens: options.modelRouteMaxTokens },
     })
   }
   if (composition.toolFilter !== undefined) childCtx.tools.restrict(composition.toolFilter)

@@ -7,12 +7,12 @@
  */
 
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type { LspHover, LspLocation, LspOperation, LspPosition } from '@deepseek-ai/dsh-lsp'
+import type { LspHover, LspLocation, LspOperation, LspPosition, LspRange } from '@deepseek-ai/dsh-lsp'
 import { posix, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** The four operations the tool exposes, as a runtime tuple for schema enum + validation. */
-export const LSP_OPERATIONS: readonly LspOperation[] = ['goToDefinition', 'findReferences', 'goToImplementation', 'hover']
+export const LSP_OPERATIONS: readonly LspOperation[] = ['goToDefinition', 'findReferences', 'goToImplementation', 'hover', 'prepareRename']
 
 /** Default cap on rendered locations before an omission marker is appended. */
 export const DEFAULT_MAX_LOCATIONS = 100
@@ -117,6 +117,14 @@ export function formatLocations(
 export function formatHover(hover: LspHover | null, maxResultChars: number): string {
   const text = hover === null ? 'No hover information.' : hover.contents
   return boundResult(text, maxResultChars, 'hover')
+}
+
+/** Render the preparation result for a safe rename preview. */
+export function formatRename(range: LspRange, placeholder: string, maxResultChars: number): string {
+  const start = `${range.start.line + 1}:${range.start.character + 1}`
+  const end = `${range.end.line + 1}:${range.end.character + 1}`
+  const label = placeholder === '' ? 'unnamed symbol' : placeholder
+  return boundResult(`Rename ${label} at ${start}-${end}.`, maxResultChars, 'rename')
 }
 
 /** Bound a complete rendered result, including the truncation notice itself. */

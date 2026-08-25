@@ -366,6 +366,9 @@ describe('SubagentRuntime.startContinuable', () => {
             { provider: 'mock', model: 'primary' },
             { provider: 'mock', model: 'fallback' },
           ],
+          modelRouteMaxTokens: 777,
+          modelRouteMaxAttempts: 1,
+          writeScope: ['src/**'],
         },
       },
     })
@@ -378,6 +381,9 @@ describe('SubagentRuntime.startContinuable', () => {
         { provider: 'mock', model: 'primary' },
         { provider: 'mock', model: 'fallback' },
       ],
+      modelRouteMaxTokens: 777,
+      modelRouteMaxAttempts: 1,
+      writeScope: ['src/**'],
     })
   })
 

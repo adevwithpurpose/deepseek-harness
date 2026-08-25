@@ -12,6 +12,7 @@ import { unknownFallbackDefinition } from '../src/client/conversation-nodes/fall
 import { nextStepInboxDefinition, nextTurnInboxDefinition } from '../src/client/conversation-nodes/inbox.ts'
 import { messageDefinition } from '../src/client/conversation-nodes/message.ts'
 import { failoverDefinition } from '../src/client/conversation-nodes/failover.ts'
+import { routeSelectedDefinition } from '../src/client/conversation-nodes/route-selected.ts'
 import { retryDefinition } from '../src/client/conversation-nodes/retry.ts'
 import { toolDefinition } from '../src/client/conversation-nodes/tool.ts'
 import { turnErrorDefinition } from '../src/client/conversation-nodes/turn-error.ts'
@@ -30,6 +31,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   commandDefinition,
   compactionDefinition,
   failoverDefinition,
+  routeSelectedDefinition,
   retryDefinition,
   turnErrorDefinition,
   turnMaxTokensDefinition,
@@ -697,6 +699,15 @@ describe('built-in conversation node Definitions', () => {
     ])
     const failoverNode = node(snapshot(failover), 'model-failover')
     expect(failoverNode?.data).toMatchObject({ transition: { attempt: 2, fromModel: 'oc/big-pickle', toModel: 'opencode-go/deepseek-v4-flash-max' } })
+
+    const selected = assembler([
+      at(4, 'llm/route-selected', {
+        routeId: 'fast', provider: 'omniroute', model: 'oc/big-pickle', candidates: 3,
+      }),
+    ])
+    expect(node(snapshot(selected), 'model-route-selected')?.data).toMatchObject({
+      route: { routeId: 'fast', provider: 'omniroute', model: 'oc/big-pickle', candidates: 3 },
+    })
 
     const retryNode = node(snapshot(retry), 'model-retry')
     const retryData = retryNode?.data as RetryChatData

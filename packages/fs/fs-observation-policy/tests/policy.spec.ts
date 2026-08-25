@@ -44,6 +44,46 @@ describe('registration / disposal', () => {
   })
 })
 
+describe('write-scope decision', () => {
+  it('allows legacy actors with no declared scope', async () => {
+    const { ctx } = await setup()
+    expect(await writeIntent(ctx, target('a.txt'), ownerExec({}))).toEqual({ kind: 'createIfAbsent' })
+  })
+
+  it('rejects a child write outside its declared scope', async () => {
+    const { ctx } = await setup()
+    const actor = { agent: { session: {}, options: { writeScope: ['src/**'] } } }
+    await expect(writeIntent(ctx, target('docs/a.txt'), actor)).rejects.toMatchObject({ code: 'FS_WRITE_SCOPE' })
+  })
+
+  it('allows a child write inside its declared scope', async () => {
+    const { ctx } = await setup()
+    const actor = { agent: { session: {}, options: { writeScope: ['src/**'] } } }
+    expect(await writeIntent(ctx, target('src/a.txt'), actor)).toEqual({ kind: 'createIfAbsent' })
+  })
+
+  it('matches the realpath identity, so an in-scope symlink to an out-of-scope file is denied', async () => {
+    const { ctx } = await setup()
+    const actor = { agent: { session: {}, options: { writeScope: ['src/**'] } } }
+    const linked: FsTarget = { targetKey: FsTargetKey('C:/outside/secret.txt'), displayPath: 'src/link.txt' }
+    await expect(writeIntent(ctx, linked, actor)).rejects.toMatchObject({ code: 'FS_WRITE_SCOPE' })
+  })
+
+  it('requires a directory boundary, denying a sibling prefix', async () => {
+    const { ctx } = await setup()
+    const actor = { agent: { session: {}, options: { writeScope: ['src'] } } }
+    expect(await writeIntent(ctx, target('src/a.txt'), actor)).toEqual({ kind: 'createIfAbsent' })
+    await expect(writeIntent(ctx, target('src-evil/a.txt'), actor)).rejects.toMatchObject({ code: 'FS_WRITE_SCOPE' })
+  })
+
+  it('normalizes backslash canonical identities against forward-slash scope entries', async () => {
+    const { ctx } = await setup()
+    const actor = { agent: { session: {}, options: { writeScope: ['E:/repo/**'] } } }
+    const windows: FsTarget = { targetKey: FsTargetKey('E:\\repo\\a.txt'), displayPath: 'E:\\repo\\a.txt' }
+    expect(await writeIntent(ctx, windows, actor)).toEqual({ kind: 'createIfAbsent' })
+  })
+})
+
 describe('write-intent decision', () => {
   it('an unobserved target decides createIfAbsent', async () => {
     const { ctx } = await setup()

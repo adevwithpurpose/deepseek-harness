@@ -16,6 +16,7 @@ import { assertNever } from '@deepseek-ai/dsh-llm'
 import type {
   WireHover,
   WireLocation,
+  WireRename,
   WireLocationLink,
   WireMarkedString,
   WireProviderCapability,
@@ -35,6 +36,7 @@ export function requestMethod(operation: LspOperation): string {
     case 'findReferences': return 'textDocument/references'
     case 'goToImplementation': return 'textDocument/implementation'
     case 'hover': return 'textDocument/hover'
+    case 'prepareRename': return 'textDocument/prepareRename'
     /* v8 ignore next -- exhaustive over the closed LspOperation union; unreachable. */
     default: return assertNever(operation, 'requestMethod')
   }
@@ -47,6 +49,7 @@ function capabilityValue(capabilities: WireServerCapabilities, operation: LspOpe
     case 'findReferences': return capabilities.referencesProvider
     case 'goToImplementation': return capabilities.implementationProvider
     case 'hover': return capabilities.hoverProvider
+    case 'prepareRename': return capabilities.renameProvider
     /* v8 ignore next -- exhaustive over the closed LspOperation union; unreachable. */
     default: return assertNever(operation, 'capabilityValue')
   }
@@ -191,6 +194,15 @@ export function normalizeHover(payload: unknown): LspHover | null {
   if (range === undefined) return { contents }
   if (!isRange(range)) throw malformedResponse('LSP hover result contained a malformed range')
   return { contents, range: toRange(range) }
+}
+
+/** Normalize a prepareRename response into a rename range and placeholder. */
+export function normalizeRename(payload: unknown): { range: LspRange; placeholder: string } {
+  if (payload === null || payload === undefined) throw malformedResponse('LSP rename result was missing')
+  if (typeof payload !== 'object') throw malformedResponse('LSP rename result was not an object')
+  const rename = payload as WireRename
+  if (!isRange(rename.range)) throw malformedResponse('LSP rename result contained a malformed range')
+  return { range: toRange(rename.range), placeholder: typeof rename.placeholder === 'string' ? rename.placeholder : '' }
 }
 
 /** Render the three `Hover.contents` encodings into one string (input is untrusted wire data). */

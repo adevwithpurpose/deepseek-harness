@@ -3,6 +3,7 @@ import {
   negotiatePositionEncoding,
   normalizeHover,
   normalizeLocations,
+  normalizeRename,
   requestMethod,
   supportsOperation,
   supportsTransientOpen,
@@ -17,6 +18,7 @@ describe('requestMethod', () => {
     expect(requestMethod('findReferences')).toBe('textDocument/references')
     expect(requestMethod('goToImplementation')).toBe('textDocument/implementation')
     expect(requestMethod('hover')).toBe('textDocument/hover')
+    expect(requestMethod('prepareRename')).toBe('textDocument/prepareRename')
   })
 })
 
@@ -31,6 +33,8 @@ describe('supportsOperation', () => {
     expect(supportsOperation(caps, 'findReferences')).toBe(true)
     expect(supportsOperation(caps, 'goToImplementation')).toBe(false)
     expect(supportsOperation(caps, 'hover')).toBe(false)
+    expect(supportsOperation(caps, 'prepareRename')).toBe(false)
+    expect(supportsOperation({ ...caps, renameProvider: true }, 'prepareRename')).toBe(true)
   })
 })
 
@@ -62,6 +66,18 @@ describe('negotiatePositionEncoding', () => {
 
   it('rejects any other encoding', () => {
     expect(() => negotiatePositionEncoding('utf-8')).toThrow(/unsupported position encoding/)
+  })
+})
+
+describe('normalizeRename', () => {
+  it('normalizes a range and optional placeholder', () => {
+    expect(normalizeRename({ range: RANGE, placeholder: 'name' })).toEqual({ range: RANGE, placeholder: 'name' })
+    expect(normalizeRename({ range: RANGE })).toEqual({ range: RANGE, placeholder: '' })
+  })
+
+  it('rejects missing or malformed responses', () => {
+    expect(() => normalizeRename(null)).toThrow(/missing/)
+    expect(() => normalizeRename({ range: 'bad' })).toThrow(/malformed range/)
   })
 })
 
