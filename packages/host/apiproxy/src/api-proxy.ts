@@ -2260,6 +2260,33 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
       },
 
+      async retitleAuto(request) {
+        const { sessionId } = request.payload
+        const found = await agentFor(sessionId)
+        if ('error' in found) return err(request, found.error)
+        const titles = ctx.get('sessionTitle')
+        if (titles === undefined) {
+          return err(request, { code: 'internal', message: 'automatic titling is unavailable: this deployment mounts no session-title service', details: {} })
+        }
+        try {
+          // Explicit refresh is the deliberate re-run: it also unpins a user
+          // rename and runs even when stopOnceModeled ended automatic work.
+          const snapshot = await titles.refresh(found.agent.session)
+          // Only a provider-sourced revision counts as auto-naming: with no
+          // registered provider, refresh materializes the bare fallback.
+          if (snapshot === undefined || snapshot.source.kind !== 'provider') {
+            return ok(request, { accepted: false })
+          }
+          return ok(request, { accepted: true, title: snapshot.title, seq: snapshot.eventSeq })
+        } catch (error: unknown) {
+          return err(request, {
+            code: 'internal',
+            message: `failed to regenerate the title of session "${sessionId}": ${String(error)}`,
+            details: {},
+          })
+        }
+      },
+
       async fork(request) {
         const { sessionId, atSeq } = request.payload
         let source: SessionReadState

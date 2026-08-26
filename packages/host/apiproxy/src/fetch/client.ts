@@ -27,6 +27,7 @@ import {
   sessionModelsValueSchema,
   sessionPromptValueSchema,
   sessionRenameValueSchema,
+  sessionRetitleAutoValueSchema,
   sessionSearchValueSchema,
   sessionSelectModelValueSchema,
   sessionUpdateQueueValueSchema,
@@ -93,6 +94,7 @@ export interface IApiClient {
     models(payload: RequestPayload<'session.models'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.models'>>>
     selectModel(payload: RequestPayload<'session.selectModel'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.selectModel'>>>
     rename(payload: RequestPayload<'session.rename'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.rename'>>>
+    retitleAuto(payload: RequestPayload<'session.retitleAuto'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.retitleAuto'>>>
     fork(payload: RequestPayload<'session.fork'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.fork'>>>
     prompt(payload: RequestPayload<'session.prompt'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.prompt'>>>
     attachment(payload: RequestPayload<'session.attachment'>, signal?: AbortSignal): Promise<RpcResponse<ResponseValue<'session.attachment'>>>
@@ -177,6 +179,7 @@ const UNARY_VALUE_SCHEMAS: { [K in keyof RpcMethodMap]: z.ZodType<Wire<ResponseV
   'session.models': sessionModelsValueSchema,
   'session.selectModel': sessionSelectModelValueSchema,
   'session.rename': sessionRenameValueSchema,
+  'session.retitleAuto': sessionRetitleAutoValueSchema,
   'session.fork': sessionForkValueSchema,
   'session.prompt': sessionPromptValueSchema,
   'session.attachment': sessionAttachmentValueSchema,
@@ -417,6 +420,7 @@ export abstract class AbstractApiClient implements IApiClient {
     models: (payload, signal) => this.callUnary('session.models', payload, signal),
     selectModel: (payload, signal) => this.callUnary('session.selectModel', payload, signal),
     rename: (payload, signal) => this.callUnary('session.rename', payload, signal),
+    retitleAuto: (payload, signal) => this.callUnary('session.retitleAuto', payload, signal),
     fork: (payload, signal) => this.callUnary('session.fork', payload, signal),
     prompt: (payload, signal) => this.callUnary('session.prompt', payload, signal),
     attachment: (payload, signal) => this.callUnary('session.attachment', payload, signal),

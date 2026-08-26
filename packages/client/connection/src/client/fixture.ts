@@ -2395,6 +2395,12 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         const appended = logOf(sessionId).at(-1) as SessionEvent
         return ok(request, { title: normalized, seq: appended.seq })
       },
+      retitleAuto: (request) => {
+        const missing = requireSession(request)
+        if (missing !== undefined) return missing
+        // The offline fixture mounts no titler: report no provider revision.
+        return ok(request, { accepted: false })
+      },
       fork: (request) => {
         const { sessionId, atSeq } = request.payload
         const source = summaryOf(sessionId)
@@ -3182,6 +3188,7 @@ export class FixtureApiClient extends AbstractApiClient {
       case 'session.models': return this.api.sessions.models(request)
       case 'session.selectModel': return this.api.sessions.selectModel(request)
       case 'session.rename': return this.api.sessions.rename(request)
+      case 'session.retitleAuto': return this.api.sessions.retitleAuto(request)
       case 'session.fork': return this.api.sessions.fork(request)
       case 'session.prompt': return this.api.sessions.prompt(request)
       case 'session.attachment': return this.api.sessions.attachment(request)

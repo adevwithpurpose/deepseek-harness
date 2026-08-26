@@ -134,3 +134,58 @@ describe('session rename through the assembled browser', () => {
     await runtime.dispose()
   })
 })
+
+describe('auto-name through the assembled rename dialog', () => {
+  async function openDialogWithSession(
+    sessionFace: Partial<ISession>,
+  ): Promise<{ view: ReturnType<typeof import('@testing-library/react').render>; dispose: () => Promise<void> }> {
+    const runtime = await createRuntime()
+    await runtime.sessions.add({
+      id: SID,
+      summary: { title: '旧标题', displayTitle: '旧标题', cwd: '/w/alpha' },
+      session: sessionFace,
+    })
+    await runtime.workspaces.update((draft) => {
+      draft.items = [{
+        workspaceId: 'w1' as WorkspaceId, title: 'alpha', path: '/w/alpha',
+        sessionIds: [SID], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      }] as never
+    })
+    await runtime.root.declare(
+      { 'sidebar.workspaces': { kind: 'single', scope: 'root' } } as never,
+      SidebarFrame as never,
+    )
+    await runtime.mount({ inject: [...inject], apply })
+    const view = runtime.renderRoot()
+    const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
+    fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))
+    fireEvent.click(view.getByRole('menuitem', { name: '重命名', hidden: true }))
+    await view.findByLabelText('会话名称')
+    return { view, dispose: () => runtime.dispose() }
+  }
+
+  it('the Auto-name button fires retitleAuto and acceptance closes the dialog', async () => {
+    const retitleAuto = vi.fn<ISession['retitleAuto']>(async () => ({
+      ok: true, value: { accepted: true, title: '自动生成的标题', seq: 9 },
+    }))
+    const { view, dispose } = await openDialogWithSession({ retitleAuto })
+    fireEvent.click(view.getByRole('button', { name: '自动命名' }))
+
+    await waitFor(() => { expect(retitleAuto).toHaveBeenCalledTimes(1) })
+    await waitFor(() => { expect(view.queryByLabelText('会话名称')).toBeNull() })
+    await dispose()
+  })
+
+  it('accepted:false keeps the dialog open with the unavailable notice', async () => {
+    const retitleAuto = vi.fn<ISession['retitleAuto']>(async () => ({
+      ok: true, value: { accepted: false },
+    }))
+    const { view, dispose } = await openDialogWithSession({ retitleAuto })
+    fireEvent.click(view.getByRole('button', { name: '自动命名' }))
+
+    const alert = await view.findByRole('alert')
+    expect(alert.textContent).toContain('当前部署未挂载自动命名提供方')
+    expect(view.getByLabelText('会话名称')).toBeTruthy()
+    await dispose()
+  })
+})

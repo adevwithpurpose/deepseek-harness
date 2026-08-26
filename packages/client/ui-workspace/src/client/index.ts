@@ -85,6 +85,16 @@ export function apply(ctx: ClientContext): void {
       const result = await session.rename(title)
       if (!result.ok) throw new Error(result.error.message)
     },
+    autoNameSession: async (sessionId) => {
+      const session = ctx.sessions.binding(sessionId)?.session
+      if (session === undefined) throw new Error(`unknown session "${sessionId}"`)
+      const result = await session.retitleAuto()
+      if (!result.ok) throw new Error(result.error.message)
+      // exactOptionalPropertyTypes: only carry `title` when actually accepted.
+      return result.value.accepted && result.value.title !== undefined
+        ? { accepted: true, title: result.value.title }
+        : { accepted: false }
+    },
     forkSession: (sessionId) => {
       ctx.sessions.fork({ sessionId, increaseTitle: true })
         .then((childId) => { ctx.sessions.open(childId) })

@@ -353,6 +353,24 @@ export class Session implements SessionFace {
   }
 
   /**
+   * Re-run the automatic titler: contract session.retitleAuto 1:1. An
+   * accepted snapshot settles the 'title' projection cell exactly like a
+   * rename; `accepted: false` leaves the current title untouched.
+   * @returns the refresh outcome, or the error branch on transport failure.
+   */
+  async retitleAuto(): Promise<RpcResult<{ accepted: boolean; title?: string; seq?: number }>> {
+    try {
+      const { result } = await this.api.sessions.retitleAuto({ sessionId: this.sessionId })
+      if (result.ok && result.value.accepted && result.value.title !== undefined && result.value.seq !== undefined) {
+        this.projections.apply('title', result.value.title, result.value.seq)
+      }
+      return result
+    } catch (error) {
+      return transportError(error)
+    }
+  }
+
+  /**
    * Execute one slash-command line against this session's agent — pure
    * admission semantics (the host executor durably logs the lifecycle;
    * outcomes render as flow nodes, never as a response echo).

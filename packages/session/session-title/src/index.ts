@@ -83,6 +83,12 @@ export interface Config {
   readonly fallbackMaxBytes: number
   /** Maximum UTF-8 bytes in any accepted title. */
   readonly maxTitleBytes: number
+  /**
+   * Stop scheduling automatic provider revisions once a provider-sourced
+   * title exists. Failed attempts keep retrying on later eligible prompts;
+   * manual rename pins and explicit refresh are unaffected.
+   */
+  readonly stopOnceModeled?: boolean
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -220,6 +226,7 @@ interface ResolvedConfig {
   readonly fallbackMaxWords: number
   readonly fallbackMaxBytes: number
   readonly maxTitleBytes: number
+  readonly stopOnceModeled: boolean
 }
 
 /** One exact provider registration generation. */
@@ -264,6 +271,7 @@ export class SessionTitleService extends Service {
     fallbackMaxWords: z.number().step(1).min(1).required(),
     fallbackMaxBytes: z.number().step(1).min(1).required(),
     maxTitleBytes: z.number().step(1).min(1).required(),
+    stopOnceModeled: z.boolean(),
   })
 
   private readonly config: ResolvedConfig
@@ -287,7 +295,7 @@ export class SessionTitleService extends Service {
     if (value.fallbackMaxBytes > value.maxTitleBytes) {
       throw new Error('session-title: fallbackMaxBytes must not exceed maxTitleBytes')
     }
-    this.config = deepFreeze({ ...value })
+    this.config = deepFreeze({ ...value, stopOnceModeled: value.stopOnceModeled ?? false })
 
     ctx.effect(() => async () => {
       this.lifetime.abort(new Error('session-title service disposed'))
@@ -465,6 +473,10 @@ export class SessionTitleService extends Service {
     if (event.data.source.kind !== 'user' || collectSessionTitleMessages([event]).length === 0) return
     // A user rename pins the title: no automatic revision may override it.
     if (this.get(session)?.source.kind === 'user') return
+    // Opt-in cadence limit: a provider-sourced title ends automatic revision
+    // scheduling; failed attempts keep retrying on later eligible prompts and
+    // explicit refresh remains the deliberate re-run.
+    if (this.config.stopOnceModeled && this.get(session)?.source.kind === 'provider') return
     const registration = this.registration
     if (registration !== undefined && !registration.closing) {
       const messages = collectSessionTitleMessages(session.events, event.seq)

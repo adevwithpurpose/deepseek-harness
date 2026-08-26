@@ -19,13 +19,14 @@ Forks inherit title events in their seed unchanged. The first-prompt cadence doe
 
 ## Configuration
 
-All limits are required; the library supplies no defaults.
+`fallbackMaxWords`, `fallbackMaxBytes`, and `maxTitleBytes` are required; the library supplies no defaults.
 
 | Key | Contract |
 |---|---|
 | `fallbackMaxWords` | Positive maximum whitespace-delimited words in the deterministic fallback. |
 | `fallbackMaxBytes` | Positive maximum UTF-8 bytes in the fallback; must not exceed `maxTitleBytes`. |
 | `maxTitleBytes` | Positive maximum UTF-8 bytes accepted from any source. |
+| `stopOnceModeled` | Optional boolean (default `false`). When true, new human prompts schedule no automatic provider revision once a provider-sourced title exists — failed attempts keep retrying, manual rename pins as always, and explicit refresh remains the deliberate re-run. |
 
 ## Provider contract
 

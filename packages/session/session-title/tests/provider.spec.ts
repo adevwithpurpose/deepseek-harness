@@ -372,3 +372,94 @@ describe('SessionTitleService Provider lifecycle', () => {
     warn.mockRestore()
   })
 })
+
+describe('stopOnceModeled scheduling limit', () => {
+  const FLAGGED = { ...CONFIG, stopOnceModeled: true }
+
+  function newSession(ctx: Context, id: string) {
+    const session = ctx.sessions.create(SessionId(id))
+    session.append('turn/start', { turn: 1 })
+    return session
+  }
+
+  async function promptAgain(session: ReturnType<Context['sessions']['create']>, turn: number, text: string): Promise<void> {
+    session.append('turn/start', { turn })
+    appendHumanPrompt(session, text)
+    await settle()
+    appendRoute(session)
+    await settle()
+  }
+
+  it('stops scheduling after the first accepted provider title', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionTitleService, FLAGGED)
+    let calls = 0
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('once'),
+      automatic: 'all-prompts',
+      generate: async (request) => {
+        calls += 1
+        return { title: `Once Titled ${String(calls)}`, messageSeqs: request.messages.map(message => message.seq) }
+      },
+    })
+
+    const session = newSession(ctx, 'stop-once-a')
+    await promptAgain(session, 2, 'first prompt')
+    expect(calls).toBe(1)
+    expect(ctx.sessionTitle.get(session)?.source.kind).toBe('provider')
+
+    await promptAgain(session, 3, 'second prompt')
+    expect(calls).toBe(1)
+    expect(ctx.sessionTitle.get(session)?.title).toBe('Once Titled 1')
+  })
+
+  it('keeps retrying failed attempts on later prompts until one lands', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionTitleService, FLAGGED)
+    let calls = 0
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('flaky'),
+      automatic: 'all-prompts',
+      generate: async (request) => {
+        calls += 1
+        if (calls === 1) throw new Error('transient title failure')
+        return { title: 'Recovered Title', messageSeqs: request.messages.map(message => message.seq) }
+      },
+    })
+
+    const session = newSession(ctx, 'stop-once-b')
+    await promptAgain(session, 2, 'first prompt')
+    expect(calls).toBe(1)
+    expect(ctx.sessionTitle.get(session)?.source.kind).toBe('fallback')
+
+    await promptAgain(session, 3, 'second prompt')
+    expect(calls).toBe(2)
+    expect(ctx.sessionTitle.get(session)?.source.kind).toBe('provider')
+
+    await promptAgain(session, 4, 'third prompt')
+    expect(calls).toBe(2)
+  })
+
+  it('defaults to revising on every prompt when the flag is absent', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(SessionTitleService, CONFIG)
+    let calls = 0
+    ctx.sessionTitle.register({
+      id: SessionTitleProviderId('every'),
+      automatic: 'all-prompts',
+      generate: async (request) => {
+        calls += 1
+        return { title: `Revision ${String(calls)}`, messageSeqs: request.messages.map(message => message.seq) }
+      },
+    })
+
+    const session = newSession(ctx, 'stop-once-c')
+    await promptAgain(session, 2, 'first prompt')
+    await promptAgain(session, 3, 'second prompt')
+    expect(calls).toBe(2)
+    expect(ctx.sessionTitle.get(session)?.title).toBe('Revision 2')
+  })
+})

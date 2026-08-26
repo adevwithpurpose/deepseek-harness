@@ -72,6 +72,13 @@ export interface ISession {
    */
   rename(title: string): Promise<RpcResult<{ title: string; seq: number }>>
   /**
+   * Re-run the mounted automatic titler over this session's eligible messages
+   * (the deliberate refresh that also unpins a user rename).
+   * @returns the accepted snapshot, `accepted: false` when the deployment
+   * mounts no title provider, or the business error.
+   */
+  retitleAuto(): Promise<RpcResult<{ accepted: boolean; title?: string; seq?: number }>>
+  /**
    * Extend the history window backwards (older messages pagination).
    * @returns completion; failures land in snapshot.openState/loadingOlder.
    */

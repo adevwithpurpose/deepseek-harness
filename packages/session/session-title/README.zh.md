@@ -19,13 +19,14 @@ fork 出的会话会原样继承种子中的标题事件。首消息节奏不会
 
 ## 配置
 
-所有上限都是必填项；该库不提供默认值。
+`fallbackMaxWords`、`fallbackMaxBytes` 与 `maxTitleBytes` 为必填项；该库不提供默认值。
 
 | 键 | 约定 |
 |---|---|
 | `fallbackMaxWords` | 确定性回退中以空白分隔的最大正整数词数。 |
 | `fallbackMaxBytes` | 回退允许的最大正整数 UTF-8 字节数；不得超过 `maxTitleBytes`。 |
 | `maxTitleBytes` | 接受任何来源标题的最大正整数 UTF-8 字节数。 |
+| `stopOnceModeled` | 可选布尔值（默认 `false`）。为真时，一旦存在提供方来源的标题，新的用户提示词不再调度自动修订——失败的尝试仍会在后续合格提示词上重试；手动重命名照常固定标题，显式刷新仍是有意的重新运行。 |
 
 ## 提供方约定
 

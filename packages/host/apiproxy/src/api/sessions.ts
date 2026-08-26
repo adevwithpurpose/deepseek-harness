@@ -317,6 +317,19 @@ export interface SessionsApi {
   Promise<RpcResponse<{ title: string; seq: number }>>
 
   /**
+   * Re-runs the mounted automatic titler over the session's eligible messages
+   * (`ctx.sessionTitle.refresh`): the deliberate re-run that also unpins a
+   * user rename. `accepted: false` reports that no provider-sourced revision
+   * was produced — no registered provider (the bare fallback may still be
+   * materialized) — and leaves any existing title unchanged; a provider
+   * failure is an RPC error. The accepted snapshot returns so the caller can
+   * settle its projection cell without waiting for the push frame.
+   * Session-backed subagents reject with `agent-busy`.
+   */
+  retitleAuto(request: RpcRequest<{ sessionId: SessionId }>):
+  Promise<RpcResponse<{ accepted: boolean; title?: string; seq?: number }>>
+
+  /**
    * Sends a message. content is core's ContentBlock[] verbatim; mode maps 1:1 — queue→send, steer→steer.
    * A prompt whose content is exactly one text block starting with '/' is a slash command: the host
    * executes it through the command registry (mode-agnostic) and it is never sent to the model. A

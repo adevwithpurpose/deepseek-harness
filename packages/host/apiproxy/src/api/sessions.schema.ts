@@ -127,6 +127,23 @@ export const sessionRenameValueSchema = z.object({
   seq: z.number().int().nonnegative(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.rename'>>>
 
+/** session.retitleAuto request payload (re-run the mounted automatic titler). */
+export const sessionRetitleAutoRequestSchema = z.object({
+  sessionId: sessionIdSchema,
+}) satisfies z.ZodType<Wire<RequestPayload<'session.retitleAuto'>>>
+
+/**
+ * session.retitleAuto response value. `accepted: false` reports that no
+ * provider-sourced revision was produced (no registered provider; the bare
+ * fallback may still have been materialized); accepted carries the exact
+ * snapshot for projection settlement.
+ */
+export const sessionRetitleAutoValueSchema = z.object({
+  accepted: z.boolean(),
+  title: z.string().min(1).optional(),
+  seq: z.number().int().nonnegative().optional(),
+}) satisfies z.ZodType<Wire<ResponseValue<'session.retitleAuto'>>>
+
 /** session.fork request payload (atSeq anchors the completed-turn cut). */
 export const sessionForkRequestSchema = z.object({
   sessionId: sessionIdSchema,

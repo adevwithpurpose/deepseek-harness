@@ -112,6 +112,11 @@ export type WorkspaceBrowserInjected = {
   searchResultLimit: number
   /** Rename a Session (explicit user title; resolves on host acceptance). */
   renameSession: (sessionId: SessionId, title: string) => Promise<void>
+  /**
+   * Re-run the automatic titler for a Session (also unpins a manual rename).
+   * `accepted: false` means the deployment mounts no title provider.
+   */
+  autoNameSession: (sessionId: SessionId) => Promise<{ accepted: boolean; title?: string }>
   /** Fork a Session at its last completed turn and open the child. */
   forkSession: (sessionId: SessionId) => void
   /** Rename a Host Workspace (rejects on name conflict; resolves on durability). */

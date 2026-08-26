@@ -751,6 +751,7 @@ export function WorkspaceBrowser({
   startSession,
   open,
   renameSession,
+  autoNameSession,
   forkSession,
   renameWorkspace,
   deleteWorkspace,
@@ -936,13 +937,33 @@ export function WorkspaceBrowser({
   const [sessionRenameTarget, setSessionRenameTarget] = useState<{ sessionId: SessionNode['id']; currentTitle: string } | null>(null)
   const [sessionRenameDraft, setSessionRenameDraft] = useState('')
   const [sessionRenaming, setSessionRenaming] = useState(false)
+  const [autoNaming, setAutoNaming] = useState(false)
   const [sessionRenameError, setSessionRenameError] = useState<string | null>(null)
   const sessionRenameTrimmed = sessionRenameDraft.trim()
-  const sessionRenameBlocked = sessionRenaming || sessionRenameTrimmed === '' || sessionRenameTarget === null
+  const sessionRenameBlocked = sessionRenaming || autoNaming || sessionRenameTrimmed === '' || sessionRenameTarget === null
   const closeSessionRename = () => {
-    if (sessionRenaming) return
+    if (sessionRenaming || autoNaming) return
     setSessionRenameTarget(null)
     setSessionRenameError(null)
+  }
+  // Auto-name: re-run the mounted titler from the rename dialog. The host
+  // accepts a provider title directly, so success just closes the dialog; the
+  // sidebar row follows through the ordinary title projection.
+  const confirmAutoName = () => {
+    if (sessionRenameTarget === null || sessionRenaming || autoNaming) return
+    setAutoNaming(true)
+    setSessionRenameError(null)
+    autoNameSession(sessionRenameTarget.sessionId).then((outcome) => {
+      setAutoNaming(false)
+      if (!outcome.accepted) {
+        setSessionRenameError(t('rename.session.autoUnavailable'))
+        return
+      }
+      setSessionRenameTarget(null)
+    }).catch((reason: unknown) => {
+      setAutoNaming(false)
+      setSessionRenameError(reason instanceof Error ? reason.message : String(reason))
+    })
   }
   const confirmSessionRename = () => {
     if (sessionRenameBlocked) return
@@ -1244,7 +1265,10 @@ export function WorkspaceBrowser({
         title={t('rename.session.title')}
         footer={(
           <>
-            <Button variant="outline" disabled={sessionRenaming} onClick={closeSessionRename}>{t('cancel')}</Button>
+            <Button variant="outline" disabled={autoNaming} onClick={closeSessionRename}>{t('cancel')}</Button>
+            <Button variant="outline" disabled={sessionRenaming || autoNaming} onClick={confirmAutoName}>
+              {autoNaming ? t('rename.session.autoNaming') : t('rename.session.autoName')}
+            </Button>
             <Button variant="primary" disabled={sessionRenameBlocked} onClick={confirmSessionRename}>{t('rename')}</Button>
           </>
         )}
@@ -1254,7 +1278,7 @@ export function WorkspaceBrowser({
           value={sessionRenameDraft}
           aria-label={t('field.sessionName')}
           autoFocus
-          disabled={sessionRenaming}
+          disabled={sessionRenaming || autoNaming}
           onFocus={(e) => { e.target.select() }}
           onChange={(e) => { setSessionRenameDraft(e.target.value); setSessionRenameError(null) }}
           onCompositionStart={() => { composingRef.current = true }}
