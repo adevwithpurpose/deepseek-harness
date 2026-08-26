@@ -13,6 +13,10 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession,
 }: TurnTailNodeViewProps) {
   const data = node.data
+  // Model identity rides the turn tail on subagent views only: the parent's
+  // identity lives in the composer select and the stats strip, while a
+  // subagent's routed chain is exactly what the reader needs per turn.
+  const isSubagent = useSession(snapshot => snapshot.subagent !== null)
   const hasLaterChatNode = useSession(snapshot =>
     snapshot.chat.locations.getTurn(data.turn).at(-1) !== node.key)
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
@@ -41,6 +45,7 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
         runMs={runMs}
         ttftMs={data.ttftMs}
         tokensPerSecond={data.tokensPerSecond}
+        model={isSubagent ? closing.finalNode.provenance : undefined}
         clock="end"
         onBranch={() => { forkAt(closing.finalNode.seq) }}
         branchUnavailable={data.branchUnavailable || hasLaterChatNode}

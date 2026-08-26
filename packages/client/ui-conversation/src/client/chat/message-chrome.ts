@@ -1,5 +1,6 @@
 // Shared time-label helpers for user/assistant IconActions rows.
 
+import type { ConversationNode } from '@deepseek-ai/dsh-client-runtime/client'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 
 /** The date-template share of the conversation dictionary the clock consumes. */
@@ -67,6 +68,38 @@ export function formatLatencySeconds(ms: number): string {
 export function formatTokensPerSecond(tps: number): string {
   const clamped = Math.max(0, tps)
   return clamped >= 10 ? String(Math.round(clamped)) : String(Math.round(clamped * 10) / 10)
+}
+
+/** Provider/model identity currently answering a session, as displayed in the composer stats strip. */
+export interface SessionModelFact {
+  provider: string
+  model: string
+}
+
+/**
+ * Latest durable model fact across one chat's settled nodes. Assistant nodes
+ * contribute their request provenance; route-selection and failover nodes
+ * contribute the route's target — so routed subagents show their own chain,
+ * and a failover flips the display the moment its event lands. The highest-seq
+ * fact wins; `null` before any modeled response.
+ * @param nodes - settled Chat nodes from the conversation snapshot.
+ * @returns the current provider/model identity, or null when none exists.
+ */
+export function currentModelFromNodes(nodes: readonly ConversationNode[]): SessionModelFact | null {
+  let best: { seq: number; fact: SessionModelFact } | null = null
+  for (const node of nodes) {
+    let fact: SessionModelFact | undefined
+    if (node.kind === 'assistant') {
+      const provenance = node.provenance
+      if (provenance !== undefined) fact = { provider: provenance.provider, model: provenance.model }
+    } else if (node.kind === 'model-route-selected') {
+      fact = { provider: node.provider, model: node.model }
+    } else if (node.kind === 'model-failover') {
+      fact = { provider: node.toProvider, model: node.toModel }
+    }
+    if (fact !== undefined && (best === null || node.seq > best.seq)) best = { seq: node.seq, fact }
+  }
+  return best?.fact ?? null
 }
 
 /**

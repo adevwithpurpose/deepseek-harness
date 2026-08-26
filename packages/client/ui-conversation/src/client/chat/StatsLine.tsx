@@ -10,7 +10,7 @@ import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-session-stats/client'
 import type { ContextPressureProjection, TokenUsageProjection } from '@deepseek-ai/dsh-token-meter/client'
 import type { ComposerBarProps } from '../contract/slots.ts'
-import { formatTokensPerSecond } from './message-chrome.ts'
+import { currentModelFromNodes, formatTokensPerSecond } from './message-chrome.ts'
 import { assistantStepReading } from './turn-metrics.ts'
 import css from './StatsLine.module.css'
 
@@ -217,8 +217,12 @@ export const StatsLine = memo(function StatsLine({ useSession, useProjection, t 
   // while no projection value is served.
   const projected = useProjection('sessionStats')
   const stats = useMemo(() => projected ?? deriveStats(settledNodes), [projected, settledNodes])
-  // Pipe-separated groups (figma stats strip); a group with no data drops out whole.
+  // Identity first so the active provider/model survives strip truncation; it
+  // derives from durable nodes (assistant provenance, route selection,
+  // failover target), so a routed subagent session shows its own chain.
+  const model = useMemo(() => currentModelFromNodes(settledNodes), [settledNodes])
   const groups: string[] = []
+  if (model !== null) groups.push(t('stats.model', { provider: model.provider, model: model.model }))
   if (stats.steps > 0) {
     groups.push(t('stats.counts', { turns: stats.turns, steps: stats.steps }))
     const durations: string[] = []

@@ -5,7 +5,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import type {
-  AssistantMessageNode, ConversationSnapshot, SessionId, ToolResultNode,
+  AssistantMessageNode, ConversationNode, ConversationSnapshot, ModelFailoverNode,
+  ModelRouteSelectedNode, SessionId, ToolResultNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { EMPTY_CONVERSATION_VIEWS } from '@deepseek-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
@@ -13,6 +14,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { StatsLine, contextOccupancy, deriveStats, formatDuration, formatTokens, type StatsLineProps } from '../src/client/chat/StatsLine.tsx'
+import { currentModelFromNodes } from '../src/client/chat/message-chrome.ts'
 import { en, zh } from '../src/client/locales.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
@@ -88,6 +90,39 @@ function makeSource(init?: Partial<ConversationSnapshot>) {
     },
   }
 }
+
+describe('currentModelFromNodes', () => {
+  const routed: ModelRouteSelectedNode = {
+    kind: 'model-route-selected', seq: 2, time: 2_000,
+    routeId: 'fast', provider: 'oc', model: 'oc/big-pickle', candidates: 3,
+  }
+  const answered = (): AssistantMessageNode => ({
+    ...assistant(3, 1), provenance: { provider: 'omniroute', model: 'opencode-go/deepseek-v4-flash-max' },
+  })
+  const failedOver = (): ModelFailoverNode => ({
+    kind: 'model-failover', seq: 4, time: 4_000, turn: 1, step: 1, attempt: 2,
+    fromProvider: 'omniroute', fromModel: 'a', toProvider: 'cx', toModel: 'gpt-5.6',
+  })
+
+  it('takes the highest-seq model fact across assistant, route, and failover nodes', () => {
+    expect(currentModelFromNodes([routed, answered(), failedOver()])).toEqual({
+      provider: 'cx', model: 'gpt-5.6',
+    })
+    expect(currentModelFromNodes([routed])).toEqual({ provider: 'oc', model: 'oc/big-pickle' })
+  })
+
+  it('ignores assistant nodes without provenance and returns null before any modeled response', () => {
+    expect(currentModelFromNodes([assistant(1, 1)])).toBeNull()
+    expect(currentModelFromNodes([])).toBeNull()
+  })
+
+  it('types as the full node union so a new kind cannot silently skip the fold', () => {
+    const nodes: readonly ConversationNode[] = [answered()]
+    expect(currentModelFromNodes(nodes)).toEqual({
+      provider: 'omniroute', model: 'opencode-go/deepseek-v4-flash-max',
+    })
+  })
+})
 
 describe('deriveStats', () => {
   it('counts turns and steps and never folds node usage into accounting', () => {
@@ -329,6 +364,19 @@ describe('StatsLine', () => {
     })} />)
     expect(view.container.textContent)
       .toBe('10 turns · 89 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
+  })
+
+  it('leads the strip with the active model identity when a node carries provenance', () => {
+    const withModel: AssistantMessageNode = {
+      ...assistant(1, 1), provenance: { provider: 'oc', model: 'oc/big-pickle' },
+    }
+    const { source } = makeSource({ nodes: [withModel] })
+    const view = render(<StatsLine {...props(source, {
+      tokenUsage: USAGE,
+      sessionStats: sessionStats({ turns: 10, steps: 89 }),
+    })} />)
+    expect(view.container.textContent)
+      .toBe('Model oc/oc/big-pickle| 10 turns · 89 steps| Cache hit 90%| Input 100 tok · Output 5 tok')
   })
 
   it('treats a defined zero-count projection as empty, not as fallback', () => {
