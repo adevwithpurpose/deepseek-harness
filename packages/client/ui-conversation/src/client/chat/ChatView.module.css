@@ -105,6 +105,16 @@
   -webkit-text-fill-color: var(--dsw-alias-label-caption);
 }
 
+/* Model identity rides the clock's quiet caption styling so only the activity
+   label carries the shimmer. */
+.turnStatusModel {
+  margin-left: 8px;
+  font: var(--dsw-font-xs-13);
+  font-weight: 400;
+  color: var(--dsw-alias-label-caption);
+  -webkit-text-fill-color: var(--dsw-alias-label-caption);
+}
+
 @keyframes dsh-turn-status-shimmer {
   to {
     background-position: 0 0;

@@ -19,7 +19,8 @@ import { Button, IconChevronDownOutline14, Modal } from '@deepseek-ai/dsh-client
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { ChatNodeSeat } from './ChatNodeSeat.tsx'
-import { formatRunDuration } from './message-chrome.ts'
+import { currentModelFromNodes, formatRunDuration } from './message-chrome.ts'
+import type { SessionModelFact } from './message-chrome.ts'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -116,10 +117,13 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
 }
 
 /** Turn-level model activity label retained across first-token, tool, and streaming phases. */
-function TurnStatus({ startTime, t }: {
+function TurnStatus({ startTime, model, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   startTime: number | null
+  /** Latest durable provider/model identity across settled nodes; null before
+   *  any modeled response (fresh sessions show the bare label). */
+  model: SessionModelFact | null
   /** The owning view's locale seat. */
   t: ChatViewSlotProps['t']
 }) {
@@ -142,6 +146,12 @@ function TurnStatus({ startTime, t }: {
   return (
     <div className={css.turnStatus} role="status" aria-live="polite">
       Deep diving...
+      {model !== null && (
+        <span className={css.turnStatusModel}>
+          {'· '}
+          {t('message.model', { provider: model.provider, model: model.model })}
+        </span>
+      )}
       {showClock && (
         <span className={css.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}
@@ -162,6 +172,9 @@ export function ChatView({
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
   const timeline = useSession(s => s.chat.timeline)
+  // Same settled-node slice StatsLine reads: one derivation, two surfaces.
+  const settledNodes = useSession(s => s.chat.legacy.nodes)
+  const modelFact = useMemo(() => currentModelFromNodes(settledNodes), [settledNodes])
   const inbox = useSession(s => s.queue)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
@@ -450,7 +463,7 @@ export function ChatView({
               double-render the same wait. */}
           {/* Turn-level loading signal: rides the whole running turn (first-token
               wait, tool execution, streaming) so it never flickers per step. */}
-          {running && <TurnStatus startTime={runningTurnStart} t={t} />}
+          {running && <TurnStatus startTime={runningTurnStart} model={modelFact} t={t} />}
           {pendingSteering.map(item => (
             <PendingSteeringBubble
               key={item.id}

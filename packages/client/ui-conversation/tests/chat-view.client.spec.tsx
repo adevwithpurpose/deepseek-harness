@@ -8,8 +8,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useEffect } from 'react'
 import type {
   AssistantMessageNode, CommandNode, CompactionSummaryNode, ConversationNode, ConversationSnapshot,
-  ModelRetryNode, RunningToolCall, SessionId, SessionListState, ToolCallBlock, ToolResultNode, TurnErrorNode,
-  TurnMaxTokensNode, UserMessageNode, WorkspaceListState,
+  ModelRetryNode, ModelRouteSelectedNode, RunningToolCall, SessionId, SessionListState, ToolCallBlock,
+  ToolResultNode, TurnErrorNode, TurnMaxTokensNode, UserMessageNode, WorkspaceListState,
 } from '@deepseek-ai/dsh-client-runtime/client'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import {
@@ -102,6 +102,13 @@ const retry = (seq: number): ModelRetryNode => ({
   provider: 'mock', mode: 'normal', policyKey: 'mock-normal',
   retry: 1, maxRetries: 2, delayMs: 450,
   failure: { code: 'TRANSPORT', message: '连接被重置' },
+})
+const routeSelected = (
+  seq: number,
+  identity: { readonly provider: string; readonly model: string } = { provider: 'oc', model: 'oc/big-pickle' },
+): ModelRouteSelectedNode => ({
+  kind: 'model-route-selected', seq, time: seq * 1_000,
+  routeId: 'chat-view-route', provider: identity.provider, model: identity.model, candidates: 2,
 })
 const turnError = (seq: number, code?: string): TurnErrorNode => ({
   kind: 'turn-error', seq, time: seq * 1_000, turn: 1, step: 0,
@@ -948,6 +955,25 @@ describe('ChatView', () => {
       }] })
     })
     expect(status.textContent).toMatch(/^Deep diving\.\.\.2分0\d秒$/)
+  })
+
+  it('shows the current model identity on the running status line', () => {
+    const h = makeHarness({ nodes: [user(1, 'q'), routeSelected(2)], running: true })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('status').textContent).toBe('Deep diving...· oc/oc/big-pickle')
+  })
+
+  it('the status model follows the latest route fact as the turn runs', () => {
+    const h = makeHarness({
+      nodes: [user(1, 'q'), routeSelected(2), assistant(3, 'first')],
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+    expect(view.getByRole('status').textContent).toBe('Deep diving...· oc/oc/big-pickle')
+    act(() => {
+      h.set({ nodes: [user(1, 'q'), routeSelected(2), assistant(3, 'first'), routeSelected(4, { provider: 'fb', model: 'fallback-x' })] })
+    })
+    expect(view.getByRole('status').textContent).toBe('Deep diving...· fb/fallback-x')
   })
 
   it('hands each ordered root call to the keyed business-node slot', () => {
