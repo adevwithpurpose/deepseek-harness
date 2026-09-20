@@ -55,11 +55,18 @@ Windows path anymore (v3).
 
 ## Test procedure
 
-Offline regex matrix: `node .trash/guardrail-regex-test.mjs` (21 cases). Live
-probes use nonexistent refs/branches and a disposable scratch repo under
-`.trash/`, so an unblocked run stays harmless. The plugins dir is a git repo —
-commit here before and after every change; `config-snapshot/cordis.patch.yml`
-mirrors the active patch layer for rollback.
+The bundle lives inside the DSH repo under `plugins/`; commit here before and
+after every change. Offline checks: `node --check` on each `.mjs`,
+`python3 -m py_compile` on each `.py`, import smoke (`import()` on each `.mjs`).
+Runtime verification: boot `dsh web` with the profile's `cordis.patch.yml` and
+confirm each plugin's registration line in `~/.dsh/web-server.log` —
+`[git-guardrails] Active …`, `[youtube-transcript] tool registered …`,
+`[crawl4ai-fetch] fetchProvider "crawl4ai" registered`,
+`[omniroute-search] provider registered …`. Live probes use nonexistent
+refs/branches and a disposable scratch repo under `.trash/`, so an unblocked
+run stays harmless. The 21-case regex matrix and `config-snapshot/` mirror
+were Windows reference-machine artifacts and were NOT ported (the guard uses
+`node --check` + the boot registration line instead).
 
 ## Follow-ups (tracked, not yet implemented)
 

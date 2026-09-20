@@ -182,6 +182,7 @@ export function apply(ctx) {
   }
 
   ctx.effect(function () {
+    console.log('[omniroute-search] provider registered with DDGS cascade fallback -> ' + cfg.gatewayUrl)
     return web.registerSearchProvider({
       id: 'omniroute',
       available: function () { return true },
