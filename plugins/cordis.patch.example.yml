@@ -4,7 +4,7 @@
 #
 # Install: copy this file to ~/.dsh/profiles/web/cordis.patch.yml, copy the
 # plugins dir to ~/.dsh/plugins, then substitute the real home (POSIX):
-#   sed -i "s|<path-to-dsh-home>|$HOME/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
+#   sed -i "s|file:///<path-to-dsh-home>|file://$HOME/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
 # Restart `dsh web` after any change. Details in plugins/README.md.
 
 # 1. System Prompt & Output Rules

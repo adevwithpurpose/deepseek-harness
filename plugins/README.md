@@ -18,7 +18,7 @@ DST="${HOME}/.dsh/plugins" && mkdir -p "$DST" "${HOME}/.dsh/profiles/web" \
      plugins/dsh-youtube-transcript.mjs plugins/youtube_fetch_transcript.py \
      "$DST/"
 cp plugins/cordis.patch.example.yml "${HOME}/.dsh/profiles/web/cordis.patch.yml"
-sed -i "s|<path-to-dsh-home>|${HOME}/.dsh|g" "${HOME}/.dsh/profiles/web/cordis.patch.yml"
+sed -i "s|file:///<path-to-dsh-home>|file://${HOME}/.dsh|g" "${HOME}/.dsh/profiles/web/cordis.patch.yml"
 ```
 
 The sed -i step is the portability trick: the patch file ships with the

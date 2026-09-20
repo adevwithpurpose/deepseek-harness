@@ -65,7 +65,7 @@ Copy the `plugins/` dir to `<dsh-home>/plugins`, copy
 substitute the placeholder:
 
 ```bash
-sed -i "s|<path-to-dsh-home>|${HOME}/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
+sed -i "s|file:///<path-to-dsh-home>|file://${HOME}/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
 ```
 
 Every plugin resolves its companion script relative to its own location, so no
@@ -238,5 +238,5 @@ If an AI Agent is setting this up for a user, follow this automated checklist:
 - [ ] Ensure `~/.dsh/` and `~/.dsh/plugins/` directories exist.
 - [ ] Copy desired `.mjs` and `.py` files from `plugins/` to `~/.dsh/plugins/`.
 - [ ] Configure `~/.dsh/settings.yaml` with valid models and endpoints.
-- [ ] Configure `~/.dsh/profiles/web/cordis.patch.yml`: copy `cordis.patch.example.yml` and substitute the placeholder `file:///<dsh-home>/plugins/...` with `sed -i "s|<path-to-dsh-home>|$HOME/.dsh|g"` (see plugins/README.md).
+- [ ] Configure `~/.dsh/profiles/web/cordis.patch.yml`: copy `cordis.patch.example.yml` and substitute the placeholder `file:///<dsh-home>/plugins/...` with `sed -i "s|file:///<path-to-dsh-home>|file://$HOME/.dsh|g"` (see plugins/README.md).
 - [ ] Start or restart `dsh web` and verify output in terminal.
