@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ubuntu's package transaction scans the hosted image's full dpkg database and
-# runs post-install hooks. CI needs only the signed-archive payload, so pin and
-# verify that payload before extracting it into the ephemeral runner directory.
-readonly BUBBLEWRAP_VERSION='0.9.0-1ubuntu0.1'
-readonly BUBBLEWRAP_SHA256='1b506492bd9c7fd0cdb4f02ac822f1d3e336b0aead5113c1239baf8db5db562a'
-readonly BUBBLEWRAP_URL="https://archive.ubuntu.com/ubuntu/pool/main/b/bubblewrap/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
+# Resolve the current bubblewrap .deb through apt instead of a pinned pool URL.
+# Ubuntu removes superseded point releases from the pool the moment a security
+# update lands, so a hard-pinned URL rots into a 404 (curl exit 22) on every
+# such update — this broke every nightly run from 2026-08-24 onward when
+# 0.9.0-1ubuntu0.1 was replaced by 0.9.0-1ubuntu0.3. `apt-get download`
+# resolves the current version from the signed archive index and verifies the
+# payload's SHA-256 against it, so integrity checking is preserved without a
+# pin that rots. The download alone runs no package transaction: extraction
+# still happens manually into the ephemeral runner directory.
 
 : "${RUNNER_TEMP:?prepare-ci-bubblewrap requires RUNNER_TEMP}"
 : "${GITHUB_PATH:?prepare-ci-bubblewrap requires GITHUB_PATH}"
@@ -16,11 +19,21 @@ if [[ "$(uname -s)" != 'Linux' || "$(uname -m)" != 'x86_64' ]]; then
   exit 1
 fi
 
-archive="${RUNNER_TEMP}/bubblewrap_${BUBBLEWRAP_VERSION}_amd64.deb"
+download_dir="${RUNNER_TEMP}/dsh-bubblewrap-deb"
 root="${RUNNER_TEMP}/dsh-bubblewrap"
+mkdir -p "$download_dir"
 
-curl --fail --silent --show-error --location --retry 3 --retry-all-errors --output "$archive" "$BUBBLEWRAP_URL"
-printf '%s  %s\n' "$BUBBLEWRAP_SHA256" "$archive" | sha256sum --check --status
+sudo apt-get update -qq
+(
+  cd "$download_dir"
+  apt-get download bubblewrap
+)
+archive="$(find "$download_dir" -maxdepth 1 -name 'bubblewrap_*_amd64.deb' -print -quit)"
+if [[ -z "$archive" ]]; then
+  echo 'apt-get download produced no bubblewrap .deb' >&2
+  exit 1
+fi
+
 mkdir -p "$root"
 dpkg-deb --extract "$archive" "$root"
 printf '%s\n' "$root/usr/bin" >> "$GITHUB_PATH"
