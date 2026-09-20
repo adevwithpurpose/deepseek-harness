@@ -1,0 +1,52 @@
+# Example cordis.patch.yml for DeepSeek Harness Web Profile
+# Location on target machine: ~/.dsh/profiles/web/cordis.patch.yml
+# (e.g. C:/Users/<username>/.dsh/profiles/web/cordis.patch.yml or ~/.dsh/profiles/web/cordis.patch.yml)
+
+# 1. System Prompt & Output Rules
+- insert:
+    - id: core-rules
+      name: 'dsh-core-rules'
+      config:
+        text: |
+          ## Workspace Rules
+          1. Output discipline: Always provide your final response or tool call outside the reasoning (<think>) block. Never end a turn with only a thinking/reasoning block.
+          2. Tool safety: Verify destructive operations before executing.
+
+# 2. Permanent Plugins (Optional - Enable/Disable as desired)
+
+# Plugin A: Safety Guardrails (Zero dependencies, blocks destructive git commands)
+- insert:
+    - id: git-guardrails
+      name: 'file:///<path-to-dsh-home>/plugins/dsh-git-guardrails.mjs'
+
+# Plugin B: OmniRoute Web Search Provider (Requires local OmniRoute or falls back to DDGS)
+- insert:
+    - id: omniroute-search
+      name: 'file:///<path-to-dsh-home>/plugins/dsh-omniroute-search.mjs'
+
+# Plugin C: Crawl4AI Web Fetch Provider (Requires Python + crawl4ai)
+- insert:
+    - id: crawl4ai-fetch
+      name: 'file:///<path-to-dsh-home>/plugins/dsh-crawl4ai-fetch.mjs'
+
+# Plugin D: YouTube Transcript Tool (Requires Python + youtube extractor)
+- insert:
+    - id: youtube-transcript
+      name: 'file:///<path-to-dsh-home>/plugins/dsh-youtube-transcript.mjs'
+
+# 3. Provider Configurations
+# Pinned providers for search and web fetching:
+- id: web
+  config:
+    searchProvider: omniroute    # Options: omniroute, deepseek-official, exa
+    fetchProvider: crawl4ai      # Options: crawl4ai, http
+
+# 4. Sandbox & Approvals
+- id: sandbox-policy
+  config:
+    mode: danger-full-access
+    workspaceRoot: !!js process.cwd()
+
+- id: approval
+  config:
+    policy: never
