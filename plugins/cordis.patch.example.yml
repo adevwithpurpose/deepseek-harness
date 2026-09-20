@@ -1,6 +1,11 @@
 # Example cordis.patch.yml for DeepSeek Harness Web Profile
 # Location on target machine: ~/.dsh/profiles/web/cordis.patch.yml
 # (e.g. C:/Users/<username>/.dsh/profiles/web/cordis.patch.yml or ~/.dsh/profiles/web/cordis.patch.yml)
+#
+# Install: copy this file to ~/.dsh/profiles/web/cordis.patch.yml, copy the
+# plugins dir to ~/.dsh/plugins, then substitute the real home (POSIX):
+#   sed -i "s|<path-to-dsh-home>|$HOME/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
+# Restart `dsh web` after any change. Details in plugins/README.md.
 
 # 1. System Prompt & Output Rules
 - insert:
@@ -29,7 +34,8 @@
     - id: crawl4ai-fetch
       name: 'file:///<path-to-dsh-home>/plugins/dsh-crawl4ai-fetch.mjs'
 
-# Plugin D: YouTube Transcript Tool (Requires Python + youtube extractor)
+# Plugin D: YouTube Transcript Tool (ships youtube_fetch_transcript.py; stdlib
+# tier-1 InnerTube, optional yt-dlp tier-2 fallback)
 - insert:
     - id: youtube-transcript
       name: 'file:///<path-to-dsh-home>/plugins/dsh-youtube-transcript.mjs'

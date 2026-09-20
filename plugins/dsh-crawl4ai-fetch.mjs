@@ -1,31 +1,58 @@
-/**
- * Permanent Crawl4AI WebFetchProvider for DeepSeek Harness.
- *
- * Mounted by the `web` profile via cordis.patch.yml:
- *   - insert:
- *       - id: crawl4ai-fetch
- *         name: 'file:///C:/Users/saf08/.dsh/plugins/dsh-crawl4ai-fetch.mjs'
- *
- * Registers a `WebFetchProvider` with id `crawl4ai` into `ctx.web`.
- * Uses local Python Crawl4AI to execute JavaScript and extract clean Markdown.
- *
- * v2 fix (2026-08-22 self-audit): the Python program now lives in the companion
- * file `crawl4ai_fetch.py` beside this plugin and is invoked as a normal script
- * (`python.exe crawl4ai_fetch.py "<url>"`). The previous build inlined the
- * script through `python -c` after collapsing every newline into a space, which
- * produced invalid Python (SyntaxError) for every single request.
- */
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const name = 'crawl4ai-fetch'
 export const inject = ['web', 'shell']
 
 const REQUEST_TIMEOUT_MS = 60_000
-const PY_SCRIPT_PATH = 'C:/Users/saf08/.dsh/plugins/crawl4ai_fetch.py'
+const PY_SCRIPT_NAME = 'crawl4ai_fetch.py'
+
+/**
+ * crawl4ai fetch provider for DSH (v3: Linux/Windows/macOS portable).
+ *
+ * Registers a fetchProvider named `crawl4ai` that renders JS-heavy pages via
+ * the companion script `crawl4ai_fetch.py` (Playwright + crawl4ai) instead of
+ * the default pure-HTTP fetcher. Pin it in cordis.patch.yml:
+ *   - id: web
+ *     config:
+ *       fetchProvider: crawl4ai
+ *
+ * v3 port: the script lives beside the plugin (DSH_CRAWL_SCRIPT overrides its
+ * location) and the interpreter comes from DSH_PYTHON or the platform default
+ * (python3 / python.exe) — no more hardcoded absolute paths.
+ *
+ * Prereq on the target machine: the crawl4ai Python package in the env used by
+ * DSH_PYTHON (pip install crawl4ai && playwright install chromium).
+ */
+
+function resolvePluginHome() {
+  return dirname(fileURLToPath(import.meta.url))
+}
+
+function resolvePython(env) {
+  const override = env && env.DSH_PYTHON
+  if (override && String(override).trim()) return String(override).trim()
+  return process.platform === 'win32' ? 'python.exe' : 'python3'
+}
+
+function resolveScript(env) {
+  const override = env && env.DSH_CRAWL_SCRIPT
+  if (override && String(override).trim()) return String(override).trim()
+  return join(resolvePluginHome(), PY_SCRIPT_NAME)
+}
 
 export function apply(ctx) {
-  const web = ctx.web
   const shell = ctx.shell
   const policyService = ctx.get('sandboxPolicy')
+
+  const scriptPath = resolveScript(process.env)
+  if (!existsSync(scriptPath)) {
+    throw new Error(
+      '[crawl4ai-fetch] companion script missing: ' + scriptPath
+      + ' (set DSH_CRAWL_SCRIPT to point at crawl4ai_fetch.py)'
+    )
+  }
 
   function resolvePolicy() {
     try {
@@ -38,63 +65,38 @@ export function apply(ctx) {
     return undefined
   }
 
-  function fetchUrl(request, signal) {
-    const targetUrl = String(request.url || '').trim()
-    if (!targetUrl) {
-      return Promise.reject(new Error('crawl4ai-fetch: empty URL provided'))
-    }
-
-    // Escape only what can break out of the double-quoted argument.
-    const urlEscaped = targetUrl.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-
+  async function fetchUrl(url, options, signal) {
+    // url is validated as an http(s) absolute URL by the web tool.
+    const python = resolvePython(process.env)
     const spec = shell.resolve({
-      command: `python.exe "${PY_SCRIPT_PATH}" "${urlEscaped}"`,
+      command: `"${python}" "${scriptPath}" "${url}"`,
       timeoutMs: REQUEST_TIMEOUT_MS,
       signal,
       sandboxPolicy: resolvePolicy(),
     })
-
-    return shell.run(spec).then(function (run) {
-      if (run.exitCode !== 0) {
-        const errText = run.stderr && typeof run.stderr.text === 'string' ? run.stderr.text : ''
-        throw new Error(`Crawl4AI execution failed (exit ${run.exitCode}): ${errText.slice(0, 300)}`)
-      }
-
-      let parsed = null
-      const lines = (run.stdout.text || '').trim().split('\n')
-      for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i].trim()
-        if (line.startsWith('{') && line.endsWith('}')) {
-          try {
-            parsed = JSON.parse(line)
-            break
-          } catch {}
-        }
-      }
-
-      if (!parsed || !parsed.success) {
-        const err = parsed && parsed.error ? parsed.error : 'Invalid response from crawler'
-        throw new Error(`Crawl4AI error: ${err}`)
-      }
-
-      return {
-        url: parsed.url || targetUrl,
-        statusCode: parsed.statusCode || 200,
-        body: {
-          kind: 'text',
-          content: parsed.content || '',
-        },
-        truncated: false,
-      }
-    })
+    const run = await shell.run(spec)
+    if (run.exitCode !== 0) {
+      const msg = run.stderr && typeof run.stderr.text === 'string'
+        ? run.stderr.text.slice(0, 500)
+        : 'exit ' + run.exitCode
+      throw new Error('crawl4ai fetch failed: ' + msg)
+    }
+    const stdout = run.stdout && typeof run.stdout.text === 'string' ? run.stdout.text : ''
+    const content = (stdout || '').trim()
+    if (!content) {
+      throw new Error('crawl4ai fetch returned empty content for ' + url)
+    }
+    const headers = {
+      'content-type': 'text/html; charset=utf-8',
+    }
+    return { status: 200, headers, body: { kind: 'html', content } }
   }
 
-  ctx.effect(function () {
-    return web.registerFetchProvider({
-      id: 'crawl4ai',
-      available: function () { return true },
-      fetch: fetchUrl,
-    })
+  ctx.web.registerFetchProvider({
+    name: 'crawl4ai',
+    label: 'crawl4ai (JS-rendered)',
+    fetcher: fetchUrl,
   })
-  console.log('[crawl4ai-fetch] provider registered -> id: crawl4ai')
+
+  console.log('[crawl4ai-fetch] fetchProvider "crawl4ai" registered')
 }

@@ -1,39 +1,62 @@
-/**
- * Permanent YouTube transcript tool for DeepSeek Harness.
- *
- * Mounted by the `web` profile via cordis.patch.yml:
- *   - insert:
- *       - id: youtube-transcript
- *         name: 'file:///C:/Users/saf08/.dsh/plugins/dsh-youtube-transcript.mjs'
- *
- * Registers the model tool `youtube_transcript`: given any YouTube URL or
- * 11-char video ID it returns the FULL transcript text in one call, so agents
- * can summarize without loading the youtube-summarizer skill's multi-step
- * procedure. Extraction wraps the three-tier extractor from the vault skill
- * (public captions API -> authenticated yt-dlp with cookies -> faster-whisper).
- *
- * v2: results are cached per (videoId, language) for 30 minutes, so repeat
- * calls are instant instead of re-running Python; optional `offset`/`limit`
- * args page through long transcripts without re-extraction; `finalizeContent`
- * delivers the complete paged text to the model (the old build relied on the
- * UI-facing render, which clipped around 2k chars and forced agents to refetch
- * in slices).
- */
+import { existsSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const name = 'youtube-transcript'
 export const inject = ['tools', 'shell', 'systemPrompt']
+/**
+ * Portable YouTube transcript tool for DeepSeek Harness (v3, Linux/Windows/macOS).
+ *
+ * Mounted via cordis.patch.yml (see plugins/README.md for the sed -i one-liner):
+ *   - insert:
+ *       - id: youtube-transcript
+ *         name: 'file:///<dsh-home>/plugins/dsh-youtube-transcript.mjs'
+ *
+ * Registers the model tool `youtube_transcript`: given any YouTube URL or
+ * 11-char video ID it returns the FULL transcript text in one call. Extraction
+ * runs the companion script `youtube_fetch_transcript.py` (ships beside this
+ * plugin):
+ *   - Tier 1: InnerTube player API via urllib (no third-party deps; works where
+ *     the WEB player endpoint is not bot-gated).
+ *   - Tier 2: yt-dlp fallback (covers bot-gated/LOGIN_REQUIRED networks; the
+ *     reference machine uses this path).
+ *
+ * v3 port: dropped the absolute E:\gem\ extractor path and hardcoded
+ * interpreter; the script lives next to the plugin, DSH_YT_SCRIPT overrides its
+ * location, and DSH_PYTHON overrides the interpreter (platform default python3
+ * on POSIX, python.exe on Windows).
+ */
 
-const EXTRACTOR = 'E:\\gem\\Agent Skills\\youtube-summarizer\\scripts\\extract-transcript.py'
 const MAX_CHARS = 150000
 const TIMEOUT_MS = 300000
 const CACHE_TTL_MS = 30 * 60 * 1000
+const SCRIPT_NAME = 'youtube_fetch_transcript.py'
 
-/** key `${videoId}|${lang}` -> { text, ts } */
+/** key `${videoId}|${lang}` -> { text, tier, kind, ts } */
 const cache = new Map()
+
+function resolvePluginHome() {
+  return dirname(fileURLToPath(import.meta.url))
+}
+
+function resolvePython(env) {
+  const override = env && env.DSH_PYTHON
+  if (override && String(override).trim()) return String(override).trim()
+  return process.platform === 'win32' ? 'python.exe' : 'python3'
+}
+
 
 export function apply(ctx) {
   const shell = ctx.shell
   const policyService = ctx.get('sandboxPolicy')
+
+  const scriptPath = resolveScript(process.env)
+  if (!existsSync(scriptPath)) {
+    throw new Error(
+      '[youtube-transcript] companion script missing: ' + scriptPath
+      + ' (set DSH_YT_SCRIPT to point at youtube_fetch_transcript.py)'
+    )
+  }
 
   function resolvePolicy() {
     try {
@@ -54,18 +77,19 @@ export function apply(ctx) {
     return null
   }
 
-  function cached(key) {
+  function cached(key, now) {
     const hit = cache.get(key)
-    if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.text
+    if (hit && now - hit.ts < CACHE_TTL_MS) return hit
     if (hit) cache.delete(key)
     return null
   }
 
   async function extract(id, lang, signal) {
-    // `id` is validated against [A-Za-z0-9_-]{11} and `lang` against
-    // ^[a-zA-Z-]{2,10}$ by callers, so both are safe to interpolate unquoted.
+    // id is validated against [A-Za-z0-9_-]{11} and lang against
+    // ^[a-zA-Z-]{2,10}$ by callers, so both are safe to interpolate.
+    const python = resolvePython(process.env)
     const spec = shell.resolve({
-      command: `python.exe "${EXTRACTOR}" ${id} ${lang}`,
+      command: `"${python}" "${scriptPath}" --id ${id} --lang ${lang}`,
       timeoutMs: TIMEOUT_MS,
       signal,
       sandboxPolicy: resolvePolicy(),
@@ -73,16 +97,32 @@ export function apply(ctx) {
     const run = await shell.run(spec)
     if (run.exitCode !== 0) {
       const errText = run.stderr && typeof run.stderr.text === 'string' ? run.stderr.text : ''
-      throw new Error(`youtube_transcript: extraction failed (exit ${run.exitCode}): ${errText.slice(0, 400)}`)
+      throw new Error('youtube_transcript: extraction failed (exit ' + run.exitCode + '): '
+        + errText.slice(0, 400))
     }
     const text = (run.stdout.text || '').trim()
     if (!text) {
       const errText = run.stderr && typeof run.stderr.text === 'string' ? run.stderr.text : ''
-      throw new Error(`youtube_transcript: no transcript output. stderr head: ${errText.slice(0, 300)}`)
+      throw new Error('youtube_transcript: no transcript output. stderr head: ' + errText.slice(0, 300))
     }
-    cache.set(`${id}|${lang}`, { text, ts: Date.now() })
-    return text
+    let tier = '2'
+    let kind = 's'
+    const errText = run.stderr && typeof run.stderr.text === 'string' ? run.stderr.text : ''
+    const marker = errText.match(/^TIER(\d)\|([a-zA-Z-]+)\|([a-z]+)$/m)
+    if (marker) {
+      tier = marker[1]
+      kind = marker[3]
+    }
+    cache.set(`${id}|${lang}`, { text, tier, kind, ts: Date.now() })
+    return { text, tier, kind }
   }
+
+function resolveScript(env) {
+  const override = env && env.DSH_YT_SCRIPT
+  if (override && String(override).trim()) return String(override).trim()
+
+  return join(resolvePluginHome(), SCRIPT_NAME)
+}
 
   ctx.tools.register({
     name: 'youtube_transcript',
@@ -126,9 +166,14 @@ export function apply(ctx) {
           ? args.lang
           : 'en'
       const key = `${id}|${lang}`
+      const now = Date.now()
 
-      let text = cached(key)
-      if (text === null) text = await extract(id, lang, exec.signal)
+      let entry = cached(key, now)
+      if (entry === null) {
+        const fresh = await extract(id, lang, exec.signal)
+        entry = { ...fresh, ts: now }
+      }
+      let text = entry.text
       if (text.length > MAX_CHARS) text = text.slice(0, MAX_CHARS)
 
       const totalChars = text.length
@@ -147,6 +192,8 @@ export function apply(ctx) {
         offset,
         returnedChars: transcript.length,
         complete: offset + transcript.length >= totalChars,
+        sourceTier: entry.tier,
+        captionsKind: entry.kind === 'asr' ? 'auto-generated' : 'manual',
         transcript,
       }
     },
@@ -156,8 +203,9 @@ export function apply(ctx) {
       if (result.isError) return undefined
       const value = result.value
       if (!value || typeof value !== 'object') return undefined
-      const header = `[youtube_transcript] ${value.videoId} · ${value.language} · `
-        + `${value.returnedChars}/${value.totalChars} chars`
+      const tier = value.sourceTier === '1' ? 'InnerTube direct API' : (value.sourceTier === '2' ? 'yt-dlp' : '?')
+      const header = `[youtube_transcript] ${value.videoId} · ${value.language} · ${value.returnedChars}/${value.totalChars} chars`
+        + ` · ${value.captionsKind} captions (${tier})`
         + (value.complete
           ? ''
           : ' · MORE REMAINING (call again with offset=' + (value.offset + value.returnedChars) + ')')
@@ -187,3 +235,25 @@ export function apply(ctx) {
 
   console.log('[youtube-transcript] tool registered -> youtube_transcript')
 }
+/**
+ * Portable YouTube transcript tool for DeepSeek Harness (v3, Linux/Windows/macOS).
+ *
+ * Mounted via cordis.patch.yml (see plugins/README.md for the sed -i one-liner):
+ *   - insert:
+ *       - id: youtube-transcript
+ *         name: 'file:///<dsh-home>/plugins/dsh-youtube-transcript.mjs'
+ *
+ * Registers the model tool `youtube_transcript`: given any YouTube URL or
+ * 11-char video ID it returns the FULL transcript text in one call. Extraction
+ * runs the companion script `youtube_fetch_transcript.py` (ships beside this
+ * plugin):
+ *   - Tier 1: InnerTube player API via urllib (no third-party deps; works where
+ *     the WEB player endpoint is not bot-gated).
+ *   - Tier 2: yt-dlp fallback (covers bot-gated/LOGIN_REQUIRED networks; the
+ *     reference machine uses this path).
+ *
+ * v3 port: dropped the absolute E:\gem\ extractor path and hardcoded
+ * interpreter; the script lives next to the plugin, DSH_YT_SCRIPT overrides its
+ * location, and DSH_PYTHON overrides the interpreter (platform default python3
+ * on POSIX, python.exe on Windows).
+ */

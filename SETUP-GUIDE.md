@@ -52,10 +52,25 @@ DeepSeek Harness stores its configuration and profile state under `~/.dsh` (e.g.
     ├── dsh-omniroute-search.mjs
     ├── dsh-crawl4ai-fetch.mjs
     ├── crawl4ai_fetch.py
-    └── dsh-youtube-transcript.mjs
+    ├── dsh-youtube-transcript.mjs
+    └── youtube_fetch_transcript.py
 ```
 
 ---
+
+### Portable install (Linux/macOS/Windows with POSIX shell)
+
+Copy the `plugins/` dir to `<dsh-home>/plugins`, copy
+`cordis.patch.example.yml` to `<dsh-home>/profiles/web/cordis.patch.yml`, then
+substitute the placeholder:
+
+```bash
+sed -i "s|<path-to-dsh-home>|${HOME}/.dsh|g" ~/.dsh/profiles/web/cordis.patch.yml
+```
+
+Every plugin resolves its companion script relative to its own location, so no
+absolute paths are hardcoded. Per-plugin env overrides (`DSH_PYTHON`,
+`DSH_YT_SCRIPT`, `DSH_CRAWL_SCRIPT`): `plugins/README.md`.
 
 ## 3. Initial Configuration (`settings.yaml`)
 
@@ -110,7 +125,7 @@ cp plugins/* ~/.dsh/plugins/
   ```yaml
   - insert:
       - id: git-guardrails
-        name: 'file:///C:/Users/<username>/.dsh/plugins/dsh-git-guardrails.mjs'
+        name: 'file:///<dsh-home>/plugins/dsh-git-guardrails.mjs'   # <dsh-home> = ~/.dsh or C:/Users/<user>/.dsh
   ```
 - **How to Disable**: Remove or comment out the block in `cordis.patch.yml`.
 
@@ -124,7 +139,7 @@ cp plugins/* ~/.dsh/plugins/
      ```yaml
      - insert:
          - id: omniroute-search
-           name: 'file:///C:/Users/<username>/.dsh/plugins/dsh-omniroute-search.mjs'
+           name: 'file:///<dsh-home>/plugins/dsh-omniroute-search.mjs'   # <dsh-home> = ~/.dsh or C:/Users/<user>/.dsh
      ```
   2. Pin the search provider in `cordis.patch.yml`:
      ```yaml
@@ -148,7 +163,7 @@ cp plugins/* ~/.dsh/plugins/
      ```yaml
      - insert:
          - id: crawl4ai-fetch
-           name: 'file:///C:/Users/<username>/.dsh/plugins/dsh-crawl4ai-fetch.mjs'
+           name: 'file:///<dsh-home>/plugins/dsh-crawl4ai-fetch.mjs'   # <dsh-home> = ~/.dsh or C:/Users/<user>/.dsh
      ```
   2. Pin the fetch provider in `cordis.patch.yml`:
      ```yaml
@@ -162,13 +177,13 @@ cp plugins/* ~/.dsh/plugins/
 
 ### Plugin 4: YouTube Transcript Model Tool (`dsh-youtube-transcript.mjs`)
 - **Purpose**: Model tool `youtube_transcript`. Fetches full transcripts in 1 call with 30-minute memory caching and pagination support (`offset`/`limit`).
-- **Dependencies**: Python script / extractor.
+- **Dependencies**: Python 3.8+ — the stdlib tier-1 extractor (`youtube_fetch_transcript.py`, InnerTube player API, no third-party deps) ships beside the plugin; it works where the WEB player is not bot-gated. Optional yt-dlp on PATH enables the tier-2 fallback, which covers bot-gated networks and is the recommended install.
 - **How to Enable**:
   Add under `insert:` in `cordis.patch.yml`:
   ```yaml
   - insert:
       - id: youtube-transcript
-        name: 'file:///C:/Users/<username>/.dsh/plugins/dsh-youtube-transcript.mjs'
+        name: 'file:///<dsh-home>/plugins/dsh-youtube-transcript.mjs'   # <dsh-home> = ~/.dsh or C:/Users/<user>/.dsh
   ```
 - **How to Disable**: Remove or comment out the block in `cordis.patch.yml`.
 
@@ -223,5 +238,5 @@ If an AI Agent is setting this up for a user, follow this automated checklist:
 - [ ] Ensure `~/.dsh/` and `~/.dsh/plugins/` directories exist.
 - [ ] Copy desired `.mjs` and `.py` files from `plugins/` to `~/.dsh/plugins/`.
 - [ ] Configure `~/.dsh/settings.yaml` with valid models and endpoints.
-- [ ] Configure `~/.dsh/profiles/web/cordis.patch.yml` with correct absolute paths (e.g. `file:///C:/Users/.../.dsh/plugins/...`).
+- [ ] Configure `~/.dsh/profiles/web/cordis.patch.yml`: copy `cordis.patch.example.yml` and substitute the placeholder `file:///<dsh-home>/plugins/...` with `sed -i "s|<path-to-dsh-home>|$HOME/.dsh|g"` (see plugins/README.md).
 - [ ] Start or restart `dsh web` and verify output in terminal.
