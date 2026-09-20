@@ -140,6 +140,7 @@ export function apply(ctx) {
       command:
         cfg.curlExe + ' -s -X POST ' + cfg.gatewayUrl +
         ' -H "Content-Type: application/json"' +
+        ' -H "Authorization: Bearer ${OMNIROUTE_API_KEY}"' +
         " --data-binary '" + payload + "' --max-time 30",
       timeoutMs: cfg.timeoutMs,
       signal,
@@ -156,6 +157,13 @@ export function apply(ctx) {
         data = JSON.parse(run.stdout.text)
       } catch (err) {
         return runDdgs(new Error('non-JSON response from OmniRoute gateway'))
+      }
+
+      if (data && typeof data === 'object' && data.error) {
+        const detail = typeof data.error === 'string'
+          ? data.error
+          : String((data.error && (data.error.message || data.error.code)) || 'unknown')
+        return runDdgs(new Error('OmniRoute gateway error: ' + detail.slice(0, 200)))
       }
 
       const rows = Array.isArray(data.results) ? data.results : []

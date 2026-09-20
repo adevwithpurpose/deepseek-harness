@@ -9,6 +9,7 @@ stderr: marker line "TIER<n>|<lang>|<kind>" where kind is s (manual captions)
 or asr (auto-generated); errors and warnings go to stderr too.
 """
 import json
+import os
 import re
 import sys
 import shutil
@@ -128,12 +129,29 @@ def extract_caption_text(raw):
     return parse_vtt(raw)
 
 
+def ytdlp_cookie_args():
+    """Headless-safe cookie strategy.
+
+    A user-level ~/.config/yt-dlp/config may force --cookies-from-browser
+    <browser>+GNOMEKEYRING, which needs a D-Bus session and hard-fails when the
+    plugin runs outside a desktop session (common for server-side tool calls).
+    The CLI flags below win over the config file:
+      * if ~/.config/yt-dlp/cookies.txt exists, load it via --cookies (a plain
+        netscape-format file, no D-Bus needed) so bot-gated videos still work;
+      * otherwise use --no-cookies-from-browser (public videos only).
+    """
+    path = os.path.expanduser("~/.config/yt-dlp/cookies.txt")
+    if os.path.isfile(path):
+        return ["--cookies", path, "--no-cookies-from-browser"]
+    return ["--no-cookies-from-browser"]
+
+
 def tier2_ytdlp(video_id, lang):
     if not shutil.which("yt-dlp"):
         raise RuntimeError("yt-dlp not found on PATH (tier 1 already failed)")
     url = "https://www.youtube.com/watch?v=" + video_id
     proc = subprocess.run(
-        ["yt-dlp", "--skip-download", "--no-warnings", "-J", url],
+        ["yt-dlp", "--skip-download", "--no-warnings"] + ytdlp_cookie_args() + ["-J", url],
         capture_output=True, text=True, timeout=90,
     )
     if proc.returncode != 0:

@@ -33,7 +33,21 @@ Windows path anymore (v3).
 | `DSH_PYTHON` | crawl4ai + youtube plugins | `python3` (POSIX) / `python.exe` (Windows) |
 | `DSH_CRAWL_SCRIPT` | crawl4ai plugin | `<plugin-dir>/crawl4ai_fetch.py` |
 | `DSH_YT_SCRIPT` | youtube plugin | `<plugin-dir>/youtube_fetch_transcript.py` |
-| `OMNIROUTE_API_KEY` | omniroute plugin | — (required only for that provider) |
+| `OMNIROUTE_API_KEY` | omniroute plugin | — (required only for that provider); sent as `Authorization: Bearer $OMNIROUTE_API_KEY` via shell env expansion, so the key value never enters plugin strings or logs |
+
+## Headless / server-side behavior
+
+- **youtube tier 2 (yt-dlp):** runs with `--no-cookies-from-browser` so a user
+  config that forces GNOME-keyring cookies cannot hard-fail server-side (no
+  D-Bus session). When `~/.config/yt-dlp/cookies.txt` exists it is passed via
+  `--cookies` (plain netscape file — no keyring needed) so bot-gated networks
+  still work.
+- **omniroute search:** a gateway 401/error response (e.g. missing or invalid
+  API key) is treated as a gateway failure and cascades to DDGS instead of
+  silently returning an empty result.
+- **crawl4ai:** the fetch provider registers regardless; calls fail with a
+  readable error until `pip install crawl4ai` (+ `playwright install chromium`)
+  is done in the interpreter selected by `DSH_PYTHON`.
 
 ## Hard contracts (learned 2026-08-22, do not relearn)
 
@@ -64,7 +78,9 @@ confirm each plugin's registration line in `~/.dsh/web-server.log` —
 `[crawl4ai-fetch] fetchProvider "crawl4ai" registered`,
 `[omniroute-search] provider registered …`. Live probes use nonexistent
 refs/branches and a disposable scratch repo under `.trash/`, so an unblocked
-run stays harmless. The 21-case regex matrix and `config-snapshot/` mirror
+run stays harmless. Runtime verification used an isolated `dsh web` instance
+(temporary DSH_HOME, port 3199) so the production server, its log, and the
+live GUI stayed untouched. The 21-case regex matrix and `config-snapshot/` mirror
 were Windows reference-machine artifacts and were NOT ported (the guard uses
 `node --check` + the boot registration line instead).
 
