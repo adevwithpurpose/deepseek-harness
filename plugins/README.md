@@ -33,6 +33,7 @@ Windows path anymore (v3).
 | `DSH_PYTHON` | crawl4ai + youtube plugins | `python3` (POSIX) / `python.exe` (Windows) |
 | `DSH_CRAWL_SCRIPT` | crawl4ai plugin | `<plugin-dir>/crawl4ai_fetch.py` |
 | `DSH_YT_SCRIPT` | youtube plugin | `<plugin-dir>/youtube_fetch_transcript.py` |
+| `YOUTUBE_INNERTUBE_KEY` | youtube plugin | unset — tier 1 sends the player request with no `?key=` param; set only to supply a custom InnerTube key |
 | `OMNIROUTE_API_KEY` | omniroute plugin | — (required only for that provider); sent as `Authorization: Bearer $OMNIROUTE_API_KEY` via shell env expansion, so the key value never enters plugin strings or logs |
 
 ## Headless / server-side behavior

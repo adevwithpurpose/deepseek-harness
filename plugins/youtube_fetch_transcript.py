@@ -16,7 +16,7 @@ import shutil
 import subprocess
 import urllib.request
 
-PUBLIC_WEB_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8"
+PUBLIC_WEB_KEY = os.environ.get("YOUTUBE_INNERTUBE_KEY", "")
 PLAYER_URL = "https://www.youtube.com/youtubei/v1/player"
 
 
@@ -45,7 +45,7 @@ def tier1_innerTube(video_id, lang):
         "contentCheckOk": True,
         "racyCheckOk": True,
     }).encode("utf-8")
-    url = PLAYER_URL + "?key=" + PUBLIC_WEB_KEY
+    url = PLAYER_URL + ("?key=" + PUBLIC_WEB_KEY if PUBLIC_WEB_KEY else "")
     raw = http_json(url, data=body, headers={"Content-Type": "application/json"})
     data = json.loads(raw)
     tracks = (data.get("captions") or {}).get("playerCaptionsTracklistRenderer") or {}
